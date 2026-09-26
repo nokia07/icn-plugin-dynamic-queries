@@ -102,3 +102,9 @@
 	margin: 0 0 12px;
 	color: #da1e28;
 }
+
+/* Diálogo "Guardar consulta" */
+.dqSaveQueryDialog .dqSaveNote {
+	margin: 0 0 12px;
+	color: #525252;
+}

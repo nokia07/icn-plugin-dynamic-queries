@@ -7,9 +7,11 @@ define([
 	"dijit/Dialog",
 	"dijit/form/Button",
 	"ecm/widget/search/SearchBuilder",
-	"dynamicQueriesDojo/QuerySerializer"
+	"dynamicQueriesDojo/QuerySerializer",
+	"dynamicQueriesDojo/SaveQueryDialog"
 ],
-function(declare, lang, array, domClass, domConstruct, Dialog, Button, SearchBuilder, QuerySerializer) {
+function(declare, lang, array, domClass, domConstruct, Dialog, Button, SearchBuilder, QuerySerializer,
+		SaveQueryDialog) {
 
 	/**
 	 * @name dynamicQueriesDojo.QueryTab
@@ -21,12 +23,22 @@ function(declare, lang, array, domClass, domConstruct, Dialog, Button, SearchBui
 	return declare("dynamicQueriesDojo.QueryTab", [ SearchBuilder ], {
 		/** @lends dynamicQueriesDojo.QueryTab.prototype */
 
+		// Consulta guardada que muestra la pestaña ({ id, version, name, description, categoryId }); null si es nueva.
+		savedQuery: null,
+
 		postCreate: function() {
 			this.inherited(arguments);
 			var searchDefinition = this.searchDefinition;
 			// Con clase y no con estilo en línea: Restablecer vuelve a mostrar estos botones.
 			domClass.add(searchDefinition.saveButton.domNode, "dqHiddenAction");
 			domClass.add(searchDefinition.saveAsButton.domNode, "dqHiddenAction");
+
+			var saveQueryButton = new Button({
+				label: "Guardar consulta",
+				onClick: lang.hitch(this, this._showSaveDialog)
+			});
+			this.own(saveQueryButton);
+			saveQueryButton.placeAt(searchDefinition.saveAsButton.domNode, "after");
 
 			var viewJsonButton = new Button({
 				label: "Ver JSON",
@@ -47,6 +59,30 @@ function(declare, lang, array, domClass, domConstruct, Dialog, Button, SearchBui
 		 */
 		getQueryDefinition: function() {
 			return QuerySerializer.serialize(this.searchDefinition, this.repository);
+		},
+
+		_showSaveDialog: function() {
+			var result = this.getQueryDefinition();
+			var dialog = new SaveQueryDialog({
+				query: lang.mixin({}, this.savedQuery, { definition: result.definition }),
+				definitionErrors: result.errors
+			});
+			dialog.own(dialog.on("saved", lang.hitch(this, this._onQuerySaved)), dialog.on("hide", function() {
+				dialog.destroyRecursive();
+			}));
+			dialog.show();
+		},
+
+		_onQuerySaved: function(savedQuery) {
+			this.savedQuery = savedQuery;
+			this.set("title", savedQuery.name);
+			this.onQuerySaved(savedQuery);
+		},
+
+		/**
+		 * Se invoca después de guardar la consulta en el servicio, con la consulta tal como la devolvió.
+		 */
+		onQuerySaved: function(savedQuery) {
 		},
 
 		_showJson: function() {

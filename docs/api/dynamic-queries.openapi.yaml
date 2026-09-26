@@ -307,7 +307,9 @@ components:
       name: X-ICN-User
       in: header
       required: true
-      description: Identificador del usuario de ICN en cuyo nombre actúa el plug-in.
+      description: |
+        Identificador del usuario de ICN en cuyo nombre actúa el plug-in, codificado como URL en UTF-8
+        (las cabeceras HTTP no admiten caracteres fuera de ASCII): `jp%C3%A9rez` → `jpérez`. La API debe decodificarlo.
       schema:
         type: string
         example: jperez

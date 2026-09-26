@@ -123,3 +123,25 @@ Correspondencia con el contrato (`docs/api/dynamic-queries.openapi.yaml`):
 | `xs:boolean` | BOOLEAN |
 | `xs:guid` | GUID |
 | `xs:object` | OBJECT |
+
+## Servicios del plug-in desde el navegador (`ecm/model/Request`)
+
+- `Request.invokePluginService(pluginId, serviceId, { requestParams, requestCompleteCallback, requestFailedCallback })`.
+- `Request.postPluginService(pluginId, serviceId, contentType, { requestBody, requestParams, … })`: envía `requestBody`
+  crudo por POST con ese `Content-Type`; en Java se lee con `request.getReader()`.
+- Ambos agregan a los parámetros `plugin`, `action` (= id del servicio) y `desktop`, **sobrescribiendo** los que
+  uno envíe con esos nombres. Por eso `QueryStoreService` recibe la operación en `operation`.
+- `requestCompleteCallback` recibe la respuesta JSON ya parseada.
+
+En Java, `PluginServiceCallbacks.getUserId()` da el usuario de ICN. `PluginServiceCallbacks` no puede instanciarse
+fuera de ICN (depende de clases que no están en `navigatorAPI.jar`): la lógica del servicio va en un método que no lo
+reciba, para poder probarla.
+
+## Diálogos (`ecm/widget/dialog/BaseDialog`)
+
+- `addButton(label, onClick, disabled, isDefault)` devuelve el botón; trae su propio Cancelar.
+- `setMessage(texto, "error")` muestra el aviso rojo estándar de ICN arriba del contenido (y el diálogo crece).
+- `contentArea` es el nodo donde va el formulario.
+- Con `fitContentArea: true` (predeterminado) fija el alto del contenido al abrirse y recorta lo que se agregue
+  después; `setIntroText` se mide antes del salto de línea y el diálogo queda corto. Para formularios: cargar los
+  datos antes de `show()`, `fitContentArea: false` y los avisos dentro de `contentArea`.

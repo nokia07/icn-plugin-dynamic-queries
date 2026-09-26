@@ -1,17 +1,43 @@
 <div>
-	<!--  Please add your configuration pane -->
-	<!--  For example
-    <table class="propertyTable" role="presentation">
-        <tr>
-            <td class="propertyRowLabel">
-                <span class="required">*</span>
-                <label for="${id}_ecServerURI">Server:</label>&nbsp;
-                <div data-dojo-type="ecm/widget/HoverHelp" data-dojo-attach-point="ecServerURIHoverHelp" message="Specify a server address."></div>
-            </td>
-            <td class="propertyRowValue">
-                <div id="${id}_ecServerURI" data-dojo-attach-point="ecServerURI" data-dojo-attach-event="onKeyUp: _onFieldChange" data-dojo-type="ecm/widget/ValidationTextBox" required="true" trim="true" propercase="false"></div>
-            </td>
-        </tr>
-    </table>
-    -->
+	<p class="dqConfigIntro">
+		Servicio REST donde el feature <strong>Consultas dinámicas</strong> guarda las consultas
+		(contrato: <code>docs/api/dynamic-queries.openapi.yaml</code>).
+		Si deja la URL vacía, el plug-in funciona en <strong>modo simulado</strong>: guarda las consultas en la memoria
+		del servidor de ICN, compartidas por todos los usuarios, y se pierden al reiniciar.
+	</p>
+	<table class="propertyTable" role="presentation">
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_apiUrl">URL del servicio de consultas:</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_apiUrl" data-dojo-attach-point="apiUrlField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="required:false, trim:true, propercase:false, maxLength:512, regExp:'(https?://\\S+)?', invalidMessage:'Ingrese una URL que empiece por http:// o https://', placeHolder:'https://servidor/dynamic-queries/v1'"></div>
+			</td>
+		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_apiToken">Token de servicio:</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_apiToken" data-dojo-attach-point="apiTokenField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="type:'password', required:false, trim:true, propercase:false, maxLength:2048"></div>
+			</td>
+		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_timeout">Tiempo de espera (segundos):</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_timeout" data-dojo-attach-point="timeoutField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="required:false, trim:true, maxLength:3, regExp:'([1-9][0-9]{0,2})?', invalidMessage:'Ingrese un número entre 1 y 999', placeHolder:'15'"></div>
+			</td>
+		</tr>
+	</table>
 </div>
