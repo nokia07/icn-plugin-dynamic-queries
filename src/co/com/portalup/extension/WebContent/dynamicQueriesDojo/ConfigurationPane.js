@@ -7,7 +7,7 @@ define([
 	],
 	function(declare, _TemplatedMixin, _WidgetsInTemplateMixin, PluginConfigurationPane, template) {
 
-		return declare("DynamicQueriesDojo.ConfigurationPane", [ PluginConfigurationPane, _TemplatedMixin, _WidgetsInTemplateMixin], {
+		return declare("dynamicQueriesDojo.ConfigurationPane", [ PluginConfigurationPane, _TemplatedMixin, _WidgetsInTemplateMixin], {
 		
 		templateString: template,
 		widgetsInTemplate: true,

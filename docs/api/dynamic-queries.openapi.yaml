@@ -1,0 +1,687 @@
+openapi: 3.0.3
+info:
+  title: Dynamic Queries API
+  version: 1.0.0-draft
+  description: |
+    Servicio que almacena las consultas creadas desde el feature **DQ** del plug-in DynamicQueries de
+    IBM Content Navigator (ICN).
+
+    **Quién llama:** únicamente el servidor de ICN, a través del `PluginService` del plug-in. El navegador
+    nunca invoca esta API directamente.
+
+    **Autenticación:** token de servicio (`Authorization: Bearer <token>`) configurado en el plug-in.
+    El usuario final de ICN viaja en la cabecera `X-ICN-User`; la API la usa para auditoría
+    (`createdBy`/`updatedBy`) y no debe aceptar esos campos en el cuerpo.
+
+    **Ejecución:** la API solo almacena definiciones. Las consultas se ejecutan en ICN contra FileNet P8.
+
+    **Estado:** borrador. Contrato propuesto por el equipo del plug-in; sujeto a revisión.
+  license:
+    name: Propietario - PortalUp
+servers:
+  - url: https://{host}/dynamic-queries/v1
+    variables:
+      host:
+        default: api.example.com
+security:
+  - serviceToken: []
+tags:
+  - name: Categorías
+    description: Agrupación de consultas.
+  - name: Consultas
+    description: Definiciones de consultas creadas en ICN.
+
+paths:
+  /categories:
+    get:
+      tags: [Categorías]
+      summary: Lista las categorías
+      operationId: listCategories
+      parameters:
+        - $ref: '#/components/parameters/IcnUser'
+      responses:
+        '200':
+          description: Todas las categorías, ordenadas por nombre.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Categorías]
+      summary: Crea una categoría
+      operationId: createCategory
+      parameters:
+        - $ref: '#/components/parameters/IcnUser'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryInput'
+      responses:
+        '201':
+          description: Categoría creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '409':
+          description: Ya existe una categoría con ese nombre.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /categories/{categoryId}:
+    parameters:
+      - $ref: '#/components/parameters/CategoryId'
+      - $ref: '#/components/parameters/IcnUser'
+    put:
+      tags: [Categorías]
+      summary: Renombra o actualiza una categoría
+      operationId: updateCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryInput'
+      responses:
+        '200':
+          description: Categoría actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Ya existe otra categoría con ese nombre.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Categorías]
+      summary: Elimina una categoría vacía
+      operationId: deleteCategory
+      responses:
+        '204':
+          description: Categoría eliminada.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: La categoría todavía contiene consultas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /queries:
+    get:
+      tags: [Consultas]
+      summary: Lista consultas (resumen, sin definición)
+      description: Alimenta el árbol del panel izquierdo del feature DQ.
+      operationId: listQueries
+      parameters:
+        - $ref: '#/components/parameters/IcnUser'
+        - name: categoryId
+          in: query
+          description: Solo consultas de esta categoría.
+          schema:
+            type: string
+        - name: name
+          in: query
+          description: Filtra por nombre (contiene, sin distinguir mayúsculas ni tildes).
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: '`recent` ordena por `updatedAt` descendente (para "Consultas recientes"); `name` por nombre.'
+          schema:
+            type: string
+            enum: [name, recent]
+            default: name
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Página de resúmenes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Consultas]
+      summary: Crea una consulta
+      operationId: createQuery
+      parameters:
+        - $ref: '#/components/parameters/IcnUser'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryInput'
+            examples:
+              polizasVigentes:
+                $ref: '#/components/examples/PolizasVigentes'
+      responses:
+        '201':
+          description: Consulta creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Query'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '404':
+          description: La categoría indicada no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /queries/{queryId}:
+    parameters:
+      - $ref: '#/components/parameters/QueryId'
+      - $ref: '#/components/parameters/IcnUser'
+    get:
+      tags: [Consultas]
+      summary: Obtiene una consulta con su definición completa
+      description: Se usa para reabrir la consulta en el constructor o ejecutarla desde ICN.
+      operationId: getQuery
+      responses:
+        '200':
+          description: Consulta completa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Query'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Consultas]
+      summary: Reemplaza una consulta
+      description: |
+        Control de concurrencia optimista: el cuerpo debe incluir la `version` que se leyó. Si otro usuario
+        guardó antes, la API responde 409.
+      operationId: updateQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/QueryInput'
+                - type: object
+                  required: [version]
+                  properties:
+                    version:
+                      type: integer
+      responses:
+        '200':
+          description: Consulta actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Query'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: La consulta fue modificada por otro usuario (versión desactualizada).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Consultas]
+      summary: Elimina una consulta
+      operationId: deleteQuery
+      responses:
+        '204':
+          description: Consulta eliminada.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      description: Token de servicio del plug-in de ICN.
+
+  parameters:
+    IcnUser:
+      name: X-ICN-User
+      in: header
+      required: true
+      description: Identificador del usuario de ICN en cuyo nombre actúa el plug-in.
+      schema:
+        type: string
+        example: jperez
+    CategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: string
+    QueryId:
+      name: queryId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: Falta el token de servicio o no es válido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error:
+      description: Error inesperado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Invalid:
+      description: La definición no cumple el esquema.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: El recurso no existe.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          example: Pólizas
+        description:
+          type: string
+          maxLength: 500
+
+    Category:
+      allOf:
+        - $ref: '#/components/schemas/CategoryInput'
+        - $ref: '#/components/schemas/Audit'
+        - type: object
+          required: [id, queryCount]
+          properties:
+            id:
+              type: string
+              readOnly: true
+            queryCount:
+              type: integer
+              readOnly: true
+
+    QueryInput:
+      type: object
+      required: [name, categoryId, definition]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          example: Pólizas vigentes
+        description:
+          type: string
+          maxLength: 1000
+        categoryId:
+          type: string
+          description: Categoría a la que pertenece la consulta.
+        definition:
+          $ref: '#/components/schemas/QueryDefinition'
+
+    Query:
+      allOf:
+        - $ref: '#/components/schemas/QueryInput'
+        - $ref: '#/components/schemas/Audit'
+        - type: object
+          required: [id, version]
+          properties:
+            id:
+              type: string
+              readOnly: true
+            version:
+              type: integer
+              readOnly: true
+              description: Se incrementa en cada actualización.
+
+    QuerySummary:
+      allOf:
+        - $ref: '#/components/schemas/Audit'
+        - type: object
+          required: [id, name, categoryId]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            description:
+              type: string
+            categoryId:
+              type: string
+            documentClass:
+              type: string
+              description: Nombre simbólico de la clase documental, para mostrarlo en el árbol.
+
+    QueryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuerySummary'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Audit:
+      type: object
+      properties:
+        createdBy:
+          type: string
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedBy:
+          type: string
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    QueryDefinition:
+      type: object
+      description: |
+        Lo que el usuario definió en el constructor de búsqueda de ICN. Contiene todo lo necesario para
+        reconstruir y ejecutar la búsqueda en ICN; la API la almacena tal cual, sin interpretarla más allá
+        de validar el esquema.
+      required: [schemaVersion, repository, documentClass, match, criteria]
+      properties:
+        schemaVersion:
+          type: string
+          enum: ['1.0']
+          description: Versión de este esquema de definición.
+        repository:
+          type: object
+          required: [id, objectStore, type]
+          properties:
+            id:
+              type: string
+              description: Id del repositorio en ICN.
+              example: Proteccion
+            objectStore:
+              type: string
+              description: Nombre simbólico del object store de P8.
+              example: OS1
+            type:
+              type: string
+              enum: [p8]
+        scope:
+          type: object
+          description: '"Buscar en". Si se omite, se busca en todo el object store.'
+          required: [folderPath, includeSubfolders]
+          properties:
+            folderPath:
+              type: string
+              example: \Proteccion
+            includeSubfolders:
+              type: boolean
+        documentClass:
+          type: object
+          required: [symbolicName, includeSubclasses]
+          properties:
+            symbolicName:
+              type: string
+              example: Document
+            displayName:
+              type: string
+              description: Solo informativo; ICN usa symbolicName.
+              example: Documento
+            includeSubclasses:
+              type: boolean
+        versionSelection:
+          type: string
+          description: Opciones de búsqueda → versión.
+          enum: [releasedVersion, currentVersion, allVersions]
+          default: releasedVersion
+        match:
+          $ref: '#/components/schemas/Match'
+        criteria:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CriteriaNode'
+        resultColumns:
+          type: array
+          description: Nombres simbólicos de las propiedades a mostrar en los resultados, en orden.
+          items:
+            type: string
+
+    Match:
+      type: string
+      description: '`ALL` = coincidencia total (AND); `ANY` = cualquier coincidencia (OR).'
+      enum: [ALL, ANY]
+
+    CriteriaNode:
+      oneOf:
+        - $ref: '#/components/schemas/Condition'
+        - $ref: '#/components/schemas/Group'
+      discriminator:
+        propertyName: type
+        mapping:
+          condition: '#/components/schemas/Condition'
+          group: '#/components/schemas/Group'
+
+    Condition:
+      type: object
+      description: Una fila propiedad / operador / valor.
+      required: [type, property, dataType, operator, values]
+      properties:
+        type:
+          type: string
+          enum: [condition]
+        property:
+          type: string
+          description: Nombre simbólico de la propiedad.
+          example: DocumentTitle
+        label:
+          type: string
+          description: Nombre visible; solo informativo.
+          example: Título del documento
+        dataType:
+          $ref: '#/components/schemas/DataType'
+        operator:
+          $ref: '#/components/schemas/Operator'
+        values:
+          type: array
+          description: |
+            Cantidad según el operador: 0 para IS_NULL/IS_NOT_NULL, 2 para BETWEEN/NOT_BETWEEN,
+            1 o más para IN/NOT_IN, 1 para el resto. Fechas en ISO-8601; BOOLEAN como true/false.
+          items:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+
+    Group:
+      type: object
+      description: '"Añadir grupo": condiciones combinadas con su propio AND/OR. Admite anidamiento.'
+      required: [type, match, criteria]
+      properties:
+        type:
+          type: string
+          enum: [group]
+        match:
+          $ref: '#/components/schemas/Match'
+        criteria:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CriteriaNode'
+
+    DataType:
+      type: string
+      enum: [STRING, INTEGER, FLOAT, DATETIME, BOOLEAN, GUID, OBJECT]
+
+    Operator:
+      type: string
+      description: Vocabulario propio y estable; el plug-in traduce desde/hacia los operadores de ICN.
+      enum:
+        - EQUAL
+        - NOT_EQUAL
+        - LESS
+        - LESS_OR_EQUAL
+        - GREATER
+        - GREATER_OR_EQUAL
+        - STARTS_WITH
+        - ENDS_WITH
+        - CONTAINS
+        - NOT_CONTAINS
+        - BETWEEN
+        - NOT_BETWEEN
+        - IN
+        - NOT_IN
+        - IS_NULL
+        - IS_NOT_NULL
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          description: Mensaje legible, apto para mostrar al usuario.
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: definition.criteria[0].values
+              message:
+                type: string
+
+  examples:
+    PolizasVigentes:
+      summary: Consulta con una condición y un grupo OR
+      value:
+        name: Pólizas vigentes
+        description: Pólizas POL-* emitidas en 2026 de las líneas Vida o Salud
+        categoryId: cat-polizas
+        definition:
+          schemaVersion: '1.0'
+          repository:
+            id: Proteccion
+            objectStore: OS1
+            type: p8
+          scope:
+            folderPath: \Proteccion
+            includeSubfolders: true
+          documentClass:
+            symbolicName: Document
+            displayName: Documento
+            includeSubclasses: true
+          versionSelection: releasedVersion
+          match: ALL
+          criteria:
+            - type: condition
+              property: DocumentTitle
+              label: Título del documento
+              dataType: STRING
+              operator: STARTS_WITH
+              values: [POL-]
+            - type: condition
+              property: DateCreated
+              label: Fecha de creación
+              dataType: DATETIME
+              operator: BETWEEN
+              values: ['2026-01-01T00:00:00Z', '2026-12-31T23:59:59Z']
+            - type: group
+              match: ANY
+              criteria:
+                - type: condition
+                  property: LineaNegocio
+                  dataType: STRING
+                  operator: EQUAL
+                  values: [Vida]
+                - type: condition
+                  property: LineaNegocio
+                  dataType: STRING
+                  operator: EQUAL
+                  values: [Salud]
+          resultColumns: [DocumentTitle, DateCreated, LineaNegocio]

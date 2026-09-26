@@ -8,12 +8,12 @@ define([
 	function(declare, _TemplatedMixin, _WidgetsInTemplateMixin, PluginConfigurationPane, template) {
 
 		/**
-		 * @name DynamicQueriesDojo.FeatureConfigurationPane
+		 * @name dynamicQueriesDojo.FeatureConfigurationPane
 		 * @class 
 		 * @augments ecm.widget.admin.PluginConfigurationPane
 		 */
-		return declare("DynamicQueriesDojo.FeatureConfigurationPane", [ PluginConfigurationPane, _TemplatedMixin, _WidgetsInTemplateMixin], {
-		/** @lends DynamicQueriesDojo.ConfigurationPane.prototype */
+		return declare("dynamicQueriesDojo.FeatureConfigurationPane", [ PluginConfigurationPane, _TemplatedMixin, _WidgetsInTemplateMixin], {
+		/** @lends dynamicQueriesDojo.FeatureConfigurationPane.prototype */
 
 		templateString: template,
 		widgetsInTemplate: true,

@@ -33,7 +33,7 @@ public class DQ extends PluginFeature {
 	 * @return A short description for the menu.
 	 */
 	public String getName(Locale locale) {
-		return "DQ";
+		return "Consultas din\u00e1micas";
 	}
 
 	/**
@@ -43,7 +43,7 @@ public class DQ extends PluginFeature {
 	 * @return A short description for the feature.
 	 */
 	public String getDescription(Locale locale) {
-		return "";
+		return "Crea consultas sobre clases documentales y las env\u00eda al servicio de consultas.";
 	}
 
 	/**
@@ -58,7 +58,7 @@ public class DQ extends PluginFeature {
 	 * @return A CSS style class name for the image.
 	 */
 	public String getIconUrl() {
-		return "d";
+		return "DynamicQueriesICNLaunchIcon";
 	}
 
 	/**
@@ -90,7 +90,7 @@ public class DQ extends PluginFeature {
 	 * @return A <code>String</code> to use as tooltip text on the feature icon.
 	 */
 	public String getFeatureIconTooltipText(Locale locale) {
-		return "";
+		return "Consultas din\u00e1micas";
 	}
 
 	/**

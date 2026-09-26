@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An **IBM Content Navigator (ICN) plug-in** ("DynamicQueries", version reported by `DynamicQueries.getVersion()`). It is packaged as a single JAR that an ICN administrator registers in the ICN admin tool; ICN loads the Java classes server-side and serves everything under `WebContent/` to the browser. The project was generated from the ICN plug-in Eclipse template and is still close to scaffold state: the feature pane, config panes and global script are mostly empty stubs.
+An **IBM Content Navigator (ICN) plug-in** ("DynamicQueries", version reported by `DynamicQueries.getVersion()`). It is packaged as a single JAR that an ICN administrator registers in the ICN admin tool; ICN loads the Java classes server-side and serves everything under `WebContent/` to the browser. The project was generated from the ICN plug-in Eclipse template. The feature being built is **DQ**: it hosts ICN's native search builder, serializes the query the user defines (document class, fields, conditions, groups) to JSON and sends it through a plug-in service to an external REST API, grouped in categories. The API's contract is `docs/api/dynamic-queries.openapi.yaml` (draft; the API itself does not exist yet). The config panes and global script are still empty stubs.
 
 ## Build
 
@@ -30,8 +30,11 @@ Java side (`src/co/com/portalup/extension/`):
 Client side (`src/co/com/portalup/extension/WebContent/`, Dojo AMD):
 - `DynamicQueries.js` — global script loaded before login.
 - `dynamicQueriesDojo/` — registered by ICN as the `dynamicQueriesDojo` module path; each widget has an HTML template in `templates/` loaded via `dojo/text!`.
-  - `DQ.js` — the feature pane, extends `ecm/widget/layout/_LaunchBarPane` (implement `loadContent`/`reset`; `isLoaded`/`needReset` control lifecycle).
+  - `DQ.js` — the feature pane, extends `ecm/widget/layout/_LaunchBarPane` + `_RepositorySelectorMixin` (implement `loadContent`/`reset`; `isLoaded`/`needReset` control lifecycle). Leading pane: repository selector, "Nueva consulta", name filter and a `dijit/Tree` of categories/queries (`setTreeItems`). Center: a `StackContainer` switching between an empty state and a `TabContainer` of `QueryTab`s.
+  - `QueryTab.js` — one tab per query; will host the native ICN search builder.
   - `ConfigurationPane.js` — plug-in–level admin config (extends `ecm/widget/admin/PluginConfigurationPane`).
   - `FeatureConfigurationPane.js` — per-desktop feature config; `load()` reads `this.configurationString`, `save()` must serialize values back into it.
 
-String identifiers are the glue between the Java and JS halves: the Dojo module name, widget class names, file names and the plugin/feature ids returned in Java must match the JS `define`/`declare` names and file paths exactly. Plug-in and feature ids must be alphanumeric (used in URLs). Note that the two config panes currently `declare` themselves as `DynamicQueriesDojo.*` (capital D) while Java references `dynamicQueriesDojo.*`; AMD resolves by file path so this works, but keep new widgets consistent with the lowercase module name.
+String identifiers are the glue between the Java and JS halves: the Dojo module name, widget class names, file names and the plugin/feature ids returned in Java must match the JS `define`/`declare` names and file paths exactly. Plug-in and feature ids must be alphanumeric (used in URLs). Keep `declare` names in the lowercase `dynamicQueriesDojo.*` namespace.
+
+CSS in `DynamicQueries.css` is loaded globally into ICN, so scope every feature rule under `.dqPane`.

@@ -16,3 +16,7 @@ ant
 ```
 
 Genera `DynamicQueriesICNPlugin.jar`, que se registra en la herramienta de administración de ICN (Plugins).
+
+## API de consultas
+
+El feature DQ envía las consultas a un servicio REST externo. Su contrato (borrador) está en [`docs/api/dynamic-queries.openapi.yaml`](docs/api/dynamic-queries.openapi.yaml).
