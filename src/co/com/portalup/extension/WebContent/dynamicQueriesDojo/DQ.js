@@ -114,6 +114,14 @@ function(declare,
 		},
 
 		/**
+		 * Requerido por _RepositorySelectorMixin: doRepositorySelectorConnections lo invoca al iniciar sesión y al
+		 * seleccionar otro repositorio. Ni el mixin ni _LaunchBarPane lo implementan (verificado en ICN 3.0.10).
+		 */
+		setRepository: function(repository) {
+			this.repository = repository;
+		},
+
+		/**
 		 * Reemplaza las categorías y consultas del árbol. Cada item es { id, name, type: "category"|"query", parent },
 		 * donde parent es "recent", "categories" o el id de una categoría.
 		 */
@@ -122,17 +130,12 @@ function(declare,
 			this._renderTree(this.filterBox.get("value"));
 		},
 
-		// La API de _RepositorySelectorMixin debe confirmarse contra la versión de ICN del ambiente (Fase 0);
-		// si falla, el panel sigue funcionando con el repositorio por defecto del escritorio.
+		// createRepositorySelector solo crea el widget; hay que ubicarlo en el DOM (verificado en ICN 3.0.10).
 		_createRepositorySelector: function() {
-			try {
-				this.setRepositoryTypes("p8");
-				this.createRepositorySelector();
-				this.doRepositorySelectorConnections();
-				this.repositorySelector.placeAt(this.repositorySelectorArea);
-			} catch (e) {
-				this.logError("_createRepositorySelector", "No se pudo crear el selector de repositorio", e);
-			}
+			this.setRepositoryTypes("p8");
+			this.createRepositorySelector();
+			this.doRepositorySelectorConnections();
+			this.repositorySelector.placeAt(this.repositorySelectorArea);
 		},
 
 		_onNewQueryClick: function(evt) {
