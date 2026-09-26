@@ -70,33 +70,3 @@
 	color: #161616;
 	margin-bottom: 8px;
 }
-
-/* Pestaña de consulta */
-.dqPane .dqQueryTab {
-	padding: 16px 24px;
-	box-sizing: border-box;
-	overflow: auto;
-}
-
-.dqPane .dqSectionTitle {
-	font-size: 20px;
-	font-weight: normal;
-	color: #161616;
-	margin: 0 0 16px;
-}
-
-.dqPane .dqField {
-	margin-bottom: 12px;
-}
-
-.dqPane .dqFieldLabel {
-	display: inline-block;
-	min-width: 120px;
-	color: #525252;
-}
-
-.dqPane .dqPlaceholder {
-	padding: 16px;
-	border: 1px dashed #8d8d8d;
-	color: #525252;
-}

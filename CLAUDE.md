@@ -31,7 +31,7 @@ Client side (`src/co/com/portalup/extension/WebContent/`, Dojo AMD):
 - `DynamicQueries.js` — global script loaded before login.
 - `dynamicQueriesDojo/` — registered by ICN as the `dynamicQueriesDojo` module path; each widget has an HTML template in `templates/` loaded via `dojo/text!`.
   - `DQ.js` — the feature pane, extends `ecm/widget/layout/_LaunchBarPane` + `_RepositorySelectorMixin` (implement `loadContent`/`reset`; `isLoaded`/`needReset` control lifecycle). Leading pane: repository selector, "Nueva consulta", name filter and a `dijit/Tree` of categories/queries (`setTreeItems`). Center: a `StackContainer` switching between an empty state and a `TabContainer` of `QueryTab`s.
-  - `QueryTab.js` — one tab per query; will host the native ICN search builder.
+  - `QueryTab.js` — one tab per query: a subclass of ICN's `ecm/widget/search/SearchBuilder` (criteria, Buscar, results) with the P8 save buttons hidden. `DQ` acts as its `tabContainer`/`parentPane` (`closeTab`, `openTab`, `openSearch`). The ICN search API as verified on 3.0.10 is documented in `docs/icn-search-api.md`.
   - `ConfigurationPane.js` — plug-in–level admin config (extends `ecm/widget/admin/PluginConfigurationPane`).
   - `FeatureConfigurationPane.js` — per-desktop feature config; `load()` reads `this.configurationString`, `save()` must serialize values back into it.
 

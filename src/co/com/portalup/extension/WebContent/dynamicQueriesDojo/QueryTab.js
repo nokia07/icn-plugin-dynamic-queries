@@ -1,27 +1,30 @@
 define([
 	"dojo/_base/declare",
-	"dijit/_WidgetBase",
-	"dijit/_TemplatedMixin",
-	"dojo/text!./templates/QueryTab.html"
+	"dojo/dom-style",
+	"ecm/widget/search/SearchBuilder"
 ],
-function(declare, _WidgetBase, _TemplatedMixin, template) {
+function(declare, domStyle, SearchBuilder) {
 
 	/**
 	 * @name dynamicQueriesDojo.QueryTab
-	 * @class Pestaña de una consulta dentro del feature DQ. En la Fase 2 aloja el constructor de búsqueda nativo
-	 *        de ICN; por ahora solo muestra el repositorio de trabajo.
+	 * @class Pestaña de una consulta: el constructor de búsqueda nativo de ICN (criterios, Buscar y resultados) sin
+	 *        las opciones de guardar en P8, porque las consultas de DQ se guardan en el servicio externo.
+	 *        Ver docs/icn-search-api.md.
+	 * @augments ecm.widget.search.SearchBuilder
 	 */
-	return declare("dynamicQueriesDojo.QueryTab", [ _WidgetBase, _TemplatedMixin ], {
+	return declare("dynamicQueriesDojo.QueryTab", [ SearchBuilder ], {
 		/** @lends dynamicQueriesDojo.QueryTab.prototype */
-
-		templateString: template,
-
-		// ecm.model.Repository sobre el que se construye la consulta.
-		repository: null,
 
 		postCreate: function() {
 			this.inherited(arguments);
-			this.repositoryNameNode.textContent = this.repository ? this.repository.name : "(sin repositorio)";
+			domStyle.set(this.searchDefinition.saveButton.domNode, "display", "none");
+			domStyle.set(this.searchDefinition.saveAsButton.domNode, "display", "none");
+		},
+
+		// dijit/layout/TabContainer.closeChild solo cierra la pestaña si onClose devuelve true; SearchBuilder no lo
+		// define porque en ICN lo cierra SearchTabContainer.
+		onClose: function() {
+			return true;
 		}
 	});
 });

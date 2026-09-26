@@ -7,6 +7,7 @@ define([
 	"dojo/store/Memory",
 	"dijit/tree/ObjectStoreModel",
 	"dijit/Tree",
+	"ecm/model/Desktop",
 	"ecm/widget/layout/_LaunchBarPane",
 	"ecm/widget/layout/_RepositorySelectorMixin",
 	"dynamicQueriesDojo/QueryTab",
@@ -25,6 +26,7 @@ function(declare,
 		Memory,
 		ObjectStoreModel,
 		Tree,
+		Desktop,
 		_LaunchBarPane,
 		_RepositorySelectorMixin,
 		QueryTab,
@@ -138,16 +140,55 @@ function(declare,
 			this.repositorySelector.placeAt(this.repositorySelectorArea);
 		},
 
-		_onNewQueryClick: function(evt) {
-			evt.preventDefault();
+		/**
+		 * Abre una pestaña de consulta. Sin searchTemplate, el constructor crea una búsqueda nueva sobre el repositorio.
+		 */
+		openQueryTab: function(repository, searchTemplate) {
+			var title = searchTemplate && !searchTemplate.isNew() ? searchTemplate.name : this._nextNewQueryTitle();
 			var tab = new QueryTab({
-				title: "Nueva consulta",
+				title: title,
 				closable: true,
-				repository: this.repository
+				"class": "ecmCommonNoPadding",
+				repository: repository,
+				searchTemplate: searchTemplate,
+				parentPane: this,
+				tabContainer: this
 			});
 			this.tabContainer.addChild(tab);
 			this._updateCenterView();
 			this.tabContainer.selectChild(tab);
+			return tab;
+		},
+
+		/**
+		 * El constructor de ICN espera en tabContainer un SearchTabContainer; solo usa closeTab (botón Cancelar).
+		 */
+		closeTab: function(tab) {
+			this.tabContainer.closeChild(tab);
+		},
+
+		/**
+		 * El constructor de ICN usa parentPane.openTab / openSearch cuando se abre una búsqueda guardada desde los
+		 * resultados; se abre en una pestaña de DQ.
+		 */
+		openTab: function(params) {
+			if (params && params.searchTemplate) {
+				this.openQueryTab(params.repository, params.searchTemplate);
+			}
+		},
+
+		openSearch: function(tabType, repository, uid, searchTemplate) {
+			this.openQueryTab(repository, searchTemplate);
+		},
+
+		_onNewQueryClick: function(evt) {
+			evt.preventDefault();
+			this.openQueryTab(this.repository || Desktop.getDefaultRepository());
+		},
+
+		_nextNewQueryTitle: function() {
+			this._newQueryCount = (this._newQueryCount || 0) + 1;
+			return this._newQueryCount === 1 ? "Nueva consulta" : "Nueva consulta " + this._newQueryCount;
 		},
 
 		_onFilterChange: function(value) {

@@ -25,7 +25,17 @@ SearchPane (feature Buscar)
 Parámetros con los que `SearchPane` crea el `SearchBuilder`: `title`, `uid`, `repository`, `closable`,
 `selected`, `parentPane` (el `SearchPane`), `tabContainer`, `tabType: "searchbuilder"`. No recibe un
 `searchTemplate`: el builder crea uno nuevo (`BasicSearchDefinition.createSearchTemplate(repository)`).
-Pendiente para la Fase 2: comprobar qué funcionalidades dependen de `parentPane`, que en DQ no será un `SearchPane`.
+Del contenedor solo se usan (verificado en la Fase 2):
+- `tabContainer.closeTab(builder)`: lo llama Cancelar.
+- `parentPane`: se pasa a la lista de resultados; `openTab(params)` / `openSearch(tabType, repository, uid, template)`
+  se invocan al abrir una búsqueda guardada desde los resultados.
+
+`SearchBuilder` funciona dentro de un `dijit/layout/TabContainer` común, pero no define `onClose`, y
+`TabContainer.closeChild()` solo cierra la pestaña si `onClose()` devuelve `true`: sin eso ni la X ni Cancelar la cierran.
+
+Al pulsar Buscar, ICN 3.0.10 registra `TypeError: Cannot read properties of undefined (reading 'onRequestCompleted')`
+en `BasicSearchDefinition._executeSearch`. Ocurre igual en la búsqueda nativa de ICN y los resultados se muestran bien;
+no es un problema del plug-in.
 
 ## Leer lo que definió el usuario
 
