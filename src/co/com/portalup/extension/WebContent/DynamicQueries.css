@@ -70,3 +70,35 @@
 	color: #161616;
 	margin-bottom: 8px;
 }
+
+/* Botones de guardar en P8 del constructor de ICN; !important porque ICN los vuelve a mostrar al restablecer */
+.dqPane .dqHiddenAction {
+	display: none !important;
+}
+
+/* Diálogo "Ver JSON": los diálogos se insertan fuera de .dqPane, por eso usan su propia clase */
+.dqJsonDialog .dqJsonContent {
+	width: 640px;
+	max-width: 80vw;
+}
+
+.dqJsonDialog .dqJson {
+	max-height: 45vh;
+	overflow: auto;
+	margin: 0;
+	padding: 12px;
+	background: #f4f4f4;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 12px;
+	white-space: pre;
+}
+
+.dqJsonDialog .dqJsonErrorsTitle {
+	margin: 0 0 4px;
+	color: #da1e28;
+}
+
+.dqJsonDialog .dqJsonErrors {
+	margin: 0 0 12px;
+	color: #da1e28;
+}

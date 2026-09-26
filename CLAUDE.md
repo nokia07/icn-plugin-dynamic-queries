@@ -8,7 +8,7 @@ An **IBM Content Navigator (ICN) plug-in** ("DynamicQueries", version reported b
 
 ## Build
 
-Ant is the only build system (no Maven/Gradle, no tests, no linter):
+Ant is the only build system (no Maven/Gradle, no linter):
 
 ```sh
 ant            # default target "all" = clean, compile, jar → ./DynamicQueriesICNPlugin.jar
@@ -18,6 +18,7 @@ ant            # default target "all" = clean, compile, jar → ./DynamicQueries
 - Dependencies live in `lib/`: `navigatorAPI.jar` (ICN API, `com.ibm.ecm.extension.*`) and `j2ee.jar` (servlet API). `lib/` is git-ignored because this is a public repo and the jars are proprietary — each developer supplies them locally. Never commit them. `build.xml` and `.classpath` reference them by relative path; `.classpath` uses the generic `JRE_CONTAINER`, so keep it free of machine-specific absolute paths.
 - The `jar` target copies `src/**/WebContent/**` into the JAR alongside the classes and writes the manifest `Plugin-Class: co.com.portalup.extension.DynamicQueries`. `META-INF/MANIFEST.MF` in the repo is a reference copy; the build generates its own.
 - `bin/` is Eclipse's output folder, not used by Ant.
+- Tests: `node test/QuerySerializer.test.js` (plain Node, no dependencies; a minimal `define` shim loads the AMD module).
 
 Deploying/testing means loading the built JAR into a running ICN instance (admin tool → Plugins), then enabling the feature on a desktop.
 
@@ -31,10 +32,11 @@ Client side (`src/co/com/portalup/extension/WebContent/`, Dojo AMD):
 - `DynamicQueries.js` — global script loaded before login.
 - `dynamicQueriesDojo/` — registered by ICN as the `dynamicQueriesDojo` module path; each widget has an HTML template in `templates/` loaded via `dojo/text!`.
   - `DQ.js` — the feature pane, extends `ecm/widget/layout/_LaunchBarPane` + `_RepositorySelectorMixin` (implement `loadContent`/`reset`; `isLoaded`/`needReset` control lifecycle). Leading pane: repository selector, "Nueva consulta", name filter and a `dijit/Tree` of categories/queries (`setTreeItems`). Center: a `StackContainer` switching between an empty state and a `TabContainer` of `QueryTab`s.
-  - `QueryTab.js` — one tab per query: a subclass of ICN's `ecm/widget/search/SearchBuilder` (criteria, Buscar, results) with the P8 save buttons hidden. `DQ` acts as its `tabContainer`/`parentPane` (`closeTab`, `openTab`, `openSearch`). The ICN search API as verified on 3.0.10 is documented in `docs/icn-search-api.md`.
+  - `QueryTab.js` — one tab per query: a subclass of ICN's `ecm/widget/search/SearchBuilder` (criteria, Buscar, results) with the P8 save buttons hidden. `DQ` acts as its `tabContainer`/`parentPane` (`closeTab`, `openTab`, `openSearch`). The ICN search API as verified on 3.0.10 is documented in `docs/icn-search-api.md`. "Ver JSON" shows the query definition.
+  - `QuerySerializer.js` — reads the builder form without running the search and converts it to the API contract's `QueryDefinition` (operators, data types, groups, validation errors). `build(state)` is pure and unit-tested; `serialize(searchDefinition, repository)` reads the ICN widgets.
   - `ConfigurationPane.js` — plug-in–level admin config (extends `ecm/widget/admin/PluginConfigurationPane`).
   - `FeatureConfigurationPane.js` — per-desktop feature config; `load()` reads `this.configurationString`, `save()` must serialize values back into it.
 
 String identifiers are the glue between the Java and JS halves: the Dojo module name, widget class names, file names and the plugin/feature ids returned in Java must match the JS `define`/`declare` names and file paths exactly. Plug-in and feature ids must be alphanumeric (used in URLs). Keep `declare` names in the lowercase `dynamicQueriesDojo.*` namespace.
 
-CSS in `DynamicQueries.css` is loaded globally into ICN, so scope every feature rule under `.dqPane`.
+CSS in `DynamicQueries.css` is loaded globally into ICN, so scope every feature rule under `.dqPane`; dialogs are attached to `<body>`, so scope theirs under their own `dq*Dialog` class.

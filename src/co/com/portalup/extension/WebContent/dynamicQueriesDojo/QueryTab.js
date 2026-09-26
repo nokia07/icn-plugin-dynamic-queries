@@ -1,9 +1,15 @@
 define([
 	"dojo/_base/declare",
-	"dojo/dom-style",
-	"ecm/widget/search/SearchBuilder"
+	"dojo/_base/lang",
+	"dojo/_base/array",
+	"dojo/dom-class",
+	"dojo/dom-construct",
+	"dijit/Dialog",
+	"dijit/form/Button",
+	"ecm/widget/search/SearchBuilder",
+	"dynamicQueriesDojo/QuerySerializer"
 ],
-function(declare, domStyle, SearchBuilder) {
+function(declare, lang, array, domClass, domConstruct, Dialog, Button, SearchBuilder, QuerySerializer) {
 
 	/**
 	 * @name dynamicQueriesDojo.QueryTab
@@ -17,14 +23,58 @@ function(declare, domStyle, SearchBuilder) {
 
 		postCreate: function() {
 			this.inherited(arguments);
-			domStyle.set(this.searchDefinition.saveButton.domNode, "display", "none");
-			domStyle.set(this.searchDefinition.saveAsButton.domNode, "display", "none");
+			var searchDefinition = this.searchDefinition;
+			// Con clase y no con estilo en línea: Restablecer vuelve a mostrar estos botones.
+			domClass.add(searchDefinition.saveButton.domNode, "dqHiddenAction");
+			domClass.add(searchDefinition.saveAsButton.domNode, "dqHiddenAction");
+
+			var viewJsonButton = new Button({
+				label: "Ver JSON",
+				onClick: lang.hitch(this, this._showJson)
+			});
+			this.own(viewJsonButton);
+			viewJsonButton.placeAt(searchDefinition.cancelButton.domNode, "after");
 		},
 
 		// dijit/layout/TabContainer.closeChild solo cierra la pestaña si onClose devuelve true; SearchBuilder no lo
 		// define porque en ICN lo cierra SearchTabContainer.
 		onClose: function() {
 			return true;
+		},
+
+		/**
+		 * Definición de la consulta según el contrato de la API: { definition, errors }.
+		 */
+		getQueryDefinition: function() {
+			return QuerySerializer.serialize(this.searchDefinition, this.repository);
+		},
+
+		_showJson: function() {
+			var result = this.getQueryDefinition();
+			var content = domConstruct.create("div", { "class": "dqJsonContent" });
+			if (result.errors.length) {
+				domConstruct.create("p", { "class": "dqJsonErrorsTitle", textContent: "La consulta todavía no es válida:" }, content);
+				var list = domConstruct.create("ul", { "class": "dqJsonErrors" }, content);
+				array.forEach(result.errors, function(error) {
+					domConstruct.create("li", { textContent: error }, list);
+				});
+			}
+			domConstruct.create("pre", { "class": "dqJson", textContent: JSON.stringify(result.definition, null, 2) }, content);
+
+			var dialog = new Dialog({ title: "Definición de la consulta", "class": "dqJsonDialog", content: content });
+			// El tema de ICN oculta la X de dijit/Dialog.
+			var actionBar = domConstruct.create("div", { "class": "dijitDialogPaneActionBar" }, content);
+			var closeButton = new Button({
+				label: "Cerrar",
+				onClick: function() {
+					dialog.hide();
+				}
+			});
+			closeButton.placeAt(actionBar);
+			dialog.own(closeButton, dialog.on("hide", function() {
+				dialog.destroyRecursive();
+			}));
+			dialog.show();
 		}
 	});
 });

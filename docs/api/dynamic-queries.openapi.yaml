@@ -487,18 +487,29 @@ components:
             type:
               type: string
               enum: [p8]
+        objectType:
+          type: string
+          description: Opciones de búsqueda → tipo de objeto (Documentos / Carpetas).
+          enum: [document, folder]
+          default: document
         scope:
           type: object
           description: '"Buscar en". Si se omite, se busca en todo el object store.'
-          required: [folderPath, includeSubfolders]
+          required: [folderId, folderPath, includeSubfolders]
           properties:
+            folderId:
+              type: string
+              description: GUID de la carpeta en P8; identifica la carpeta aunque se renombre o mueva.
+              example: '{0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0}'
             folderPath:
               type: string
+              description: Ruta como la muestra ICN; solo informativa.
               example: \Proteccion
             includeSubfolders:
               type: boolean
         documentClass:
           type: object
+          description: Clase de documento (o de carpeta, si objectType es folder).
           required: [symbolicName, includeSubclasses]
           properties:
             symbolicName:
@@ -522,11 +533,23 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/CriteriaNode'
-        resultColumns:
-          type: array
-          description: Nombres simbólicos de las propiedades a mostrar en los resultados, en orden.
-          items:
-            type: string
+        resultsDisplay:
+          type: object
+          description: '"Visualización de resultados" de ICN.'
+          required: [columns]
+          properties:
+            columns:
+              type: array
+              description: |
+                Nombres simbólicos de las propiedades a mostrar, en orden. `{NAME}` es la columna de nombre
+                de ICN (título del documento o nombre de la carpeta).
+              items:
+                type: string
+            sortBy:
+              type: string
+              example: '{NAME}'
+            sortAscending:
+              type: boolean
 
     Match:
       type: string
@@ -567,7 +590,8 @@ components:
           type: array
           description: |
             Cantidad según el operador: 0 para IS_NULL/IS_NOT_NULL, 2 para BETWEEN/NOT_BETWEEN,
-            1 o más para IN/NOT_IN, 1 para el resto. Fechas en ISO-8601; BOOLEAN como true/false.
+            1 o más para IN/NOT_IN, 1 para el resto. Fechas en ISO-8601 con zona horaria, tal como las envía ICN
+            (`2026-03-15T00:00:00.000-05:00`); INTEGER y FLOAT como números; BOOLEAN como true/false.
           items:
             oneOf:
               - type: string
@@ -649,7 +673,9 @@ components:
             id: Proteccion
             objectStore: OS1
             type: p8
+          objectType: document
           scope:
+            folderId: '{0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0}'
             folderPath: \Proteccion
             includeSubfolders: true
           documentClass:
@@ -670,7 +696,7 @@ components:
               label: Fecha de creación
               dataType: DATETIME
               operator: BETWEEN
-              values: ['2026-01-01T00:00:00Z', '2026-12-31T23:59:59Z']
+              values: ['2026-01-01T00:00:00.000-05:00', '2026-12-31T00:00:00.000-05:00']
             - type: group
               match: ANY
               criteria:
@@ -684,4 +710,7 @@ components:
                   dataType: STRING
                   operator: EQUAL
                   values: [Salud]
-          resultColumns: [DocumentTitle, DateCreated, LineaNegocio]
+          resultsDisplay:
+            columns: ['{NAME}', DateCreated, LineaNegocio]
+            sortBy: DateCreated
+            sortAscending: false

@@ -59,11 +59,29 @@ Del `SearchTemplate`: `andSearch` (coincidencia total/cualquiera del nivel raíz
 
 `BasicSearchDefinition._updateSearchTemplate(template)` no sincroniza los valores de las filas.
 
+## Leer las opciones del formulario sin buscar
+
+Todas en `BasicSearchDefinition` (`searchBuilder.searchDefinition`); es lo que usa `QuerySerializer.serialize`:
+
+| Qué | Cómo | Ejemplo |
+|---|---|---|
+| Buscar en | `folderSelector.getSelected()` → `ecm.model.SelectedFolder` | `path: "\Proteccion"`, `includeSubfolders: true`, `root: true`, `item.id: "Folder,{os},{carpeta}"` |
+| Clase | `contentClassSelector.getSelected()` / `isIncludeSubclasses()` | `ContentClass` `id: "Document"`, `name: "Documento"` |
+| Coincidencia | `_propertyOptions.getSelectedOptions()` | `{ matchAll: true }` |
+| Opciones de búsqueda | `_moreOptions.getSelectedOptions()` | `{ objectType: "document" \| "folder", versionOption: "releasedversion" \| "currentversion" \| "allversions" }` |
+| Visualización de resultados | `resultsDisplayOptions.getResultsDisplay()` | `{ columns: ["{NAME}", …], sortBy: "{NAME}", sortAsc: true }` |
+
+Formato de los valores en `SearchCriterion.values`: todo llega como texto, con un `""` sobrante al final. Las fechas
+(`xs:timestamp`, formato de pantalla `d/M/yyyy`) llegan en ISO-8601 con zona horaria: `2026-03-15T00:00:00.000-05:00`.
+
 ## Guardar
 
 `BasicSearchDefinition` maneja Guardar / Guardar como con `_onSave()` / `_onSaveAs()` (abren el diálogo de
 búsqueda guardada de P8) y los habilita con `isSaveSupported()` / `configureSaveButton()`. DQ debe ocultar
-`saveButton` y `saveAsButton` y usar su propio botón, para no escribir en P8.
+`saveButton` y `saveAsButton` y usar su propio botón, para no escribir en P8. Restablecer los vuelve a mostrar
+(reescribe su estilo en línea), así que se ocultan con una clase CSS con `!important`.
+
+El tema de ICN oculta la X de cierre de `dijit/Dialog`: los diálogos propios necesitan un botón Cerrar.
 
 ## Selector de repositorio (`_RepositorySelectorMixin`)
 
