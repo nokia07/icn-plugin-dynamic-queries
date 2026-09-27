@@ -16,6 +16,8 @@ public final class PluginConfiguration {
 	/** Token de servicio (Bearer) para la API. */
 	public static final String API_TOKEN = "apiToken";
 	public static final String TIMEOUT_SECONDS = "timeoutSeconds";
+	/** Id (en ICN) del único repositorio sobre el que se diseñan y ejecutan las consultas. */
+	public static final String REPOSITORY_ID = "repositoryId";
 
 	private PluginConfiguration() {
 	}

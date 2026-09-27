@@ -4,24 +4,16 @@
 		data-dojo-props="gutters:false, liveSplitters:true"
 		class="dqMainContainer">
 
-		<!-- Panel izquierdo: repositorio, nueva consulta, filtro y árbol de consultas -->
+		<!-- Panel izquierdo: repositorio configurado, nueva consulta y consultas guardadas -->
 		<div data-dojo-type="dijit/layout/ContentPane"
 			data-dojo-attach-point="navPane"
 			data-dojo-props="region:'leading', splitter:true"
 			class="dqNavPane">
-			<div data-dojo-attach-point="repositorySelectorArea" class="dqRepositorySelector"></div>
+			<div class="dqRepository" data-dojo-attach-point="repositoryNameNode" title="Repositorio de las consultas"></div>
 			<div class="dqNewQueryRow">
-				<a href="#" role="button" class="dqLink"
+				<a href="#" role="button" class="dqLink dqDisabled" aria-disabled="true"
 					data-dojo-attach-point="newQueryLink"
 					data-dojo-attach-event="onclick: _onNewQueryClick">Nueva consulta</a>
-			</div>
-			<div class="dqFilterRow">
-				<input data-dojo-type="dijit/form/TextBox"
-					data-dojo-attach-point="filterBox"
-					data-dojo-attach-event="onChange: _onFilterChange"
-					data-dojo-props="placeHolder:'Nombre de la consulta...', intermediateChanges:true, trim:true"
-					aria-label="Filtrar consultas por nombre"
-					class="dqFilterBox" />
 			</div>
 			<div data-dojo-attach-point="treeNode" class="dqTree"></div>
 			<div data-dojo-attach-point="treeMessageNode" class="dqTreeMessage" role="status"></div>

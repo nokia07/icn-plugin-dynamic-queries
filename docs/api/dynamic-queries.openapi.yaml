@@ -26,115 +26,10 @@ servers:
 security:
   - serviceToken: []
 tags:
-  - name: Categorías
-    description: Agrupación de consultas.
   - name: Consultas
     description: Definiciones de consultas creadas en ICN.
 
 paths:
-  /categories:
-    get:
-      tags: [Categorías]
-      summary: Lista las categorías
-      operationId: listCategories
-      parameters:
-        - $ref: '#/components/parameters/IcnUser'
-      responses:
-        '200':
-          description: Todas las categorías, ordenadas por nombre.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Category'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        default:
-          $ref: '#/components/responses/Error'
-    post:
-      tags: [Categorías]
-      summary: Crea una categoría
-      operationId: createCategory
-      parameters:
-        - $ref: '#/components/parameters/IcnUser'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CategoryInput'
-      responses:
-        '201':
-          description: Categoría creada.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Category'
-        '409':
-          description: Ya existe una categoría con ese nombre.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        default:
-          $ref: '#/components/responses/Error'
-
-  /categories/{categoryId}:
-    parameters:
-      - $ref: '#/components/parameters/CategoryId'
-      - $ref: '#/components/parameters/IcnUser'
-    put:
-      tags: [Categorías]
-      summary: Renombra o actualiza una categoría
-      operationId: updateCategory
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CategoryInput'
-      responses:
-        '200':
-          description: Categoría actualizada.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Category'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: Ya existe otra categoría con ese nombre.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        default:
-          $ref: '#/components/responses/Error'
-    delete:
-      tags: [Categorías]
-      summary: Elimina una categoría vacía
-      operationId: deleteCategory
-      responses:
-        '204':
-          description: Categoría eliminada.
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: La categoría todavía contiene consultas.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        default:
-          $ref: '#/components/responses/Error'
-
   /queries:
     get:
       tags: [Consultas]
@@ -143,11 +38,6 @@ paths:
       operationId: listQueries
       parameters:
         - $ref: '#/components/parameters/IcnUser'
-        - name: categoryId
-          in: query
-          description: Solo consultas de esta categoría.
-          schema:
-            type: string
         - name: name
           in: query
           description: Filtra por nombre (contiene, sin distinguir mayúsculas ni tildes).
@@ -155,7 +45,7 @@ paths:
             type: string
         - name: sort
           in: query
-          description: '`recent` ordena por `updatedAt` descendente (para "Consultas recientes"); `name` por nombre.'
+          description: '`name` ordena por nombre; `recent`, por `updatedAt` descendente.'
           schema:
             type: string
             enum: [name, recent]
@@ -208,12 +98,6 @@ paths:
                 $ref: '#/components/schemas/Query'
         '400':
           $ref: '#/components/responses/Invalid'
-        '404':
-          description: La categoría indicada no existe.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
         default:
@@ -313,12 +197,6 @@ components:
       schema:
         type: string
         example: jperez
-    CategoryId:
-      name: categoryId
-      in: path
-      required: true
-      schema:
-        type: string
     QueryId:
       name: queryId
       in: path
@@ -353,35 +231,9 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
-    CategoryInput:
-      type: object
-      required: [name]
-      properties:
-        name:
-          type: string
-          maxLength: 120
-          example: Pólizas
-        description:
-          type: string
-          maxLength: 500
-
-    Category:
-      allOf:
-        - $ref: '#/components/schemas/CategoryInput'
-        - $ref: '#/components/schemas/Audit'
-        - type: object
-          required: [id, queryCount]
-          properties:
-            id:
-              type: string
-              readOnly: true
-            queryCount:
-              type: integer
-              readOnly: true
-
     QueryInput:
       type: object
-      required: [name, categoryId, definition]
+      required: [name, definition]
       properties:
         name:
           type: string
@@ -390,9 +242,6 @@ components:
         description:
           type: string
           maxLength: 1000
-        categoryId:
-          type: string
-          description: Categoría a la que pertenece la consulta.
         definition:
           $ref: '#/components/schemas/QueryDefinition'
 
@@ -415,15 +264,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/Audit'
         - type: object
-          required: [id, name, categoryId]
+          required: [id, name]
           properties:
             id:
               type: string
             name:
               type: string
             description:
-              type: string
-            categoryId:
               type: string
             documentClass:
               type: string
@@ -668,7 +515,6 @@ components:
       value:
         name: Pólizas vigentes
         description: Pólizas POL-* emitidas en 2026 de las líneas Vida o Salud
-        categoryId: cat-polizas
         definition:
           schemaVersion: '1.0'
           repository:

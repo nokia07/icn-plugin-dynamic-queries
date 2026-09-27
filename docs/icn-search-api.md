@@ -22,6 +22,21 @@ SearchPane (feature Buscar)
         └── searchResults: ecm.widget.listView.ContentList   ← "Resultados de búsqueda"
 ```
 
+"Buscar en" (`folderSelector`) y "Opciones de búsqueda" (`_moreOptionsNode`) comparten la celda con attach point
+`searchOptionContainer`; su fila (`searchOptionContainer.parentNode`) solo tiene además la etiqueta "Buscar en:". DQ
+oculta esa fila con la clase `dqHiddenAction`: las consultas siempre usan los valores predeterminados del constructor
+(raíz del repositorio con subcarpetas, documentos, versión de release).
+
+También oculta "Visualización de resultados" (`resultsDisplayButton`) y la casilla "Mostrar todas las propiedades"
+(`_displayAllPropsArea`, un `<span>` con la casilla y su etiqueta).
+
+**Barra de la lista de resultados.** `SearchBuilder.getContentListModules()` arma los módulos de la `ContentList`; la
+barra es `{ moduleClass: ecm/widget/listView/modules/Toolbar2 }` dentro de un módulo `Bar`, y las propiedades extra de
+esa configuración se aplican a la instancia del módulo. `showActionsButton: false` quita "Acciones", y
+`onToolbarButtonsCreated(botones)` (vacío en ICN) se invoca cada vez que se crean los botones. Ids de acción en
+ICN 3.0.10: `RefreshGrid` (Renovar), `Import` (Añadir documento), `ExportAll` (Exportar todo); hay además un
+`DropDownButton` "Nuevo" sin acción y un `ToolbarSeparator`.
+
 Parámetros con los que `SearchPane` crea el `SearchBuilder`: `title`, `uid`, `repository`, `closable`,
 `selected`, `parentPane` (el `SearchPane`), `tabContainer`, `tabType: "searchbuilder"`. No recibe un
 `searchTemplate`: el builder crea uno nuevo (`BasicSearchDefinition.createSearchTemplate(repository)`).
@@ -42,6 +57,8 @@ la búsqueda): `QueryTab.runSearch` lo captura y lo registra.
 
 - El `TextBox` que ICN usa en lugar de `dijit/form/TextBox` todavía no tiene su nodo de texto en el `postCreate` del
   widget que lo contiene: `get("value")` falla ahí. Guardar el valor en `onChange` en lugar de leerlo.
+- El tema de ICN impone el color de los enlaces `<a>`: para cambiarlo (p. ej. un enlace deshabilitado) hace falta
+  `!important`.
 - `dijit/Menu` con `selector` sobre el contenedor del árbol sigue funcionando aunque el árbol se vuelva a dibujar;
   `menu.currentTarget` es la fila sobre la que se abrió.
 
@@ -128,6 +145,8 @@ El tema de ICN oculta la X de cierre de `dijit/Dialog`: los diálogos propios ne
 
 ## Selector de repositorio (`_RepositorySelectorMixin`)
 
+DQ ya no lo usa (trabaja sobre el repositorio configurado en el plug-in); queda como referencia.
+
 - `createRepositorySelector()` crea `this.repositorySelector` pero **no** lo inserta en el DOM.
 - `doRepositorySelectorConnections()` invoca `this.setRepository(repo)` al iniciar sesión y al seleccionar otro
   repositorio. Ni el mixin ni `_LaunchBarPane` implementan `setRepository`: el feature pane debe hacerlo.
@@ -176,7 +195,9 @@ Correspondencia con el contrato (`docs/api/dynamic-queries.openapi.yaml`):
   uno envíe con esos nombres. Por eso `QueryStoreService` recibe la operación en `operation`.
 - `requestCompleteCallback` recibe la respuesta JSON ya parseada.
 
-En Java, `PluginServiceCallbacks.getUserId()` da el usuario de ICN. `PluginServiceCallbacks` no puede instanciarse
+En Java, `PluginServiceCallbacks.getUserId()` da el usuario de ICN, pero lo resuelve con el parámetro `repositoryId` de
+la solicitud: sin él lanza `NullPointerException`. Una excepción que se escapa de `execute` llega al navegador como
+**HTTP 599 sin cuerpo** (el detalle solo queda en el log del servidor). `PluginServiceCallbacks` no puede instanciarse
 fuera de ICN (depende de clases que no están en `navigatorAPI.jar`): la lógica del servicio va en un método que no lo
 reciba, para poder probarla.
 
@@ -188,3 +209,10 @@ reciba, para poder probarla.
 - Con `fitContentArea: true` (predeterminado) fija el alto del contenido al abrirse y recorta lo que se agregue
   después; `setIntroText` se mide antes del salto de línea y el diálogo queda corto. Para formularios: cargar los
   datos antes de `show()`, `fitContentArea: false` y los avisos dentro de `contentArea`.
+
+## Configuración del plug-in (herramienta de administración)
+
+`ecm.model.admin.appCfg.getRepositoryObjects(callback)` devuelve los repositorios configurados en ICN
+(`ecm.model.admin.RepositoryConfig`: `id`, `getName()`, `getType()` → `"p8"`, `getObjectStoreDisplayName()`), no solo
+los de un escritorio. Al cargar valores en `load()` hay que usar `set("value", v, false)`: si se dispara `onChange`,
+`_onParamChange` reescribe `configurationString` con campos que todavía no terminaron de cargar.

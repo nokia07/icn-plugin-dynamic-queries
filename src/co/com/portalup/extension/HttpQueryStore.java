@@ -10,7 +10,6 @@ import java.net.URL;
 import java.net.URLEncoder;
 
 import com.ibm.json.java.JSON;
-import com.ibm.json.java.JSONArray;
 import com.ibm.json.java.JSONArtifact;
 import com.ibm.json.java.JSONObject;
 
@@ -31,18 +30,9 @@ public class HttpQueryStore implements QueryStore {
 		this.timeoutMillis = timeoutMillis;
 	}
 
-	public JSONArray listCategories(String user) throws QueryStoreException {
-		return (JSONArray) send("GET", "/categories", user, null);
-	}
-
-	public JSONObject createCategory(String user, JSONObject input) throws QueryStoreException {
-		return (JSONObject) send("POST", "/categories", user, input);
-	}
-
-	public JSONObject listQueries(String user, String categoryId, String name, String sort, int limit, int offset)
+	public JSONObject listQueries(String user, String name, String sort, int limit, int offset)
 			throws QueryStoreException {
 		StringBuilder path = new StringBuilder("/queries?limit=").append(limit).append("&offset=").append(offset);
-		appendParam(path, "categoryId", categoryId);
 		appendParam(path, "name", name);
 		appendParam(path, "sort", sort);
 		return (JSONObject) send("GET", path.toString(), user, null);
@@ -82,7 +72,7 @@ public class HttpQueryStore implements QueryStore {
 				connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 				OutputStream out = connection.getOutputStream();
 				try {
-					out.write(body.serialize().getBytes("UTF-8"));
+					out.write(body.toString().getBytes("UTF-8"));
 				} finally {
 					out.close();
 				}

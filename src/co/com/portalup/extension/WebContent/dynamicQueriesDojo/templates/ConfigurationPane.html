@@ -1,11 +1,27 @@
 <div>
 	<p class="dqConfigIntro">
-		Servicio REST donde el feature <strong>Consultas dinámicas</strong> guarda las consultas
+		El feature <strong>Consultas dinámicas</strong> trabaja sobre un único repositorio: es el que muestra el panel
+		y el único con el que se pueden diseñar y guardar consultas. Debe estar agregado a los escritorios donde se use.
+	</p>
+	<p class="dqConfigIntro">
+		Servicio REST donde el feature guarda las consultas
 		(contrato: <code>docs/api/dynamic-queries.openapi.yaml</code>).
 		Si deja la URL vacía, el plug-in funciona en <strong>modo simulado</strong>: guarda las consultas en la memoria
 		del servidor de ICN, compartidas por todos los usuarios, y se pierden al reiniciar.
 	</p>
 	<table class="propertyTable" role="presentation">
+		<tr>
+			<td class="propertyRowLabel">
+				<span class="required">*</span>
+				<label for="${id}_repositoryId">Repositorio de las consultas:</label>
+			</td>
+			<td class="propertyRowValue">
+				<select id="${id}_repositoryId" data-dojo-attach-point="repositoryIdField"
+					data-dojo-attach-event="onChange: _onParamChange"
+					data-dojo-type="dijit/form/Select"
+					data-dojo-props="required:true, disabled:true"></select>
+			</td>
+		</tr>
 		<tr>
 			<td class="propertyRowLabel">
 				<label for="${id}_apiUrl">URL del servicio de consultas:</label>

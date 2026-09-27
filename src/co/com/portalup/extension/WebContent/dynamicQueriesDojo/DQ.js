@@ -3,8 +3,8 @@ define([
 	"dojo/_base/lang",
 	"dojo/_base/array",
 	"dojo/aspect",
+	"dojo/dom-class",
 	"dojo/dom-construct",
-	"dojo/promise/all",
 	"dojo/store/Memory",
 	"dijit/registry",
 	"dijit/Menu",
@@ -15,7 +15,6 @@ define([
 	"ecm/widget/dialog/ConfirmationDialog",
 	"ecm/widget/dialog/MessageDialog",
 	"ecm/widget/layout/_LaunchBarPane",
-	"ecm/widget/layout/_RepositorySelectorMixin",
 	"dynamicQueriesDojo/QuerySerializer",
 	"dynamicQueriesDojo/QueryStoreClient",
 	"dynamicQueriesDojo/QueryTab",
@@ -23,15 +22,14 @@ define([
 	"idx/layout/BorderContainer",
 	"dijit/layout/ContentPane",
 	"dijit/layout/StackContainer",
-	"dijit/layout/TabContainer",
-	"dijit/form/TextBox"
+	"dijit/layout/TabContainer"
 ],
 function(declare,
 		lang,
 		array,
 		aspect,
+		domClass,
 		domConstruct,
-		all,
 		Memory,
 		registry,
 		Menu,
@@ -42,31 +40,27 @@ function(declare,
 		ConfirmationDialog,
 		MessageDialog,
 		_LaunchBarPane,
-		_RepositorySelectorMixin,
 		QuerySerializer,
 		QueryStoreClient,
 		QueryTab,
 		template) {
 
-	// Carpetas fijas del árbol; las categorías y las consultas guardadas se cuelgan de ellas.
 	var MAX_TREE_QUERIES = 500;
-	var RECENT_QUERIES = 10;
 
+	// Carpeta única del árbol; se llena con las consultas que devuelve el servicio de consultas.
 	var ROOT_ITEMS = [
 		{ id: "root", name: "Consultas", type: "root" },
-		{ id: "recent", name: "Consultas recientes", type: "folder", parent: "root" },
-		{ id: "categories", name: "Categorías", type: "folder", parent: "root" }
+		{ id: "saved", name: "Consultas guardadas", type: "folder", parent: "root" }
 	];
 
 	/**
 	 * @name dynamicQueriesDojo.DQ
-	 * @class Feature pane de consultas dinámicas: árbol de consultas a la izquierda y una pestaña por consulta
-	 *        en el centro.
+	 * @class Feature pane de consultas dinámicas: repositorio configurado y consultas guardadas a la izquierda, una
+	 *        pestaña por consulta en el centro.
 	 * @augments ecm.widget.layout._LaunchBarPane
 	 */
 	return declare("dynamicQueriesDojo.DQ", [
-		_LaunchBarPane,
-		_RepositorySelectorMixin
+		_LaunchBarPane
 	], {
 		/** @lends dynamicQueriesDojo.DQ.prototype */
 
@@ -75,18 +69,13 @@ function(declare,
 		// Set to true if widget template contains DOJO widgets.
 		widgetsInTemplate: true,
 
-		// Items del árbol (carpetas, categorías y consultas) sin filtrar.
-		_treeItems: null,
-
-		// Texto del filtro. Se guarda al cambiar y no se lee del TextBox: en postCreate el TextBox de ICN aún no
-		// tiene su nodo de texto y get("value") falla.
-		_filterText: "",
+		// ecm.model.Repository configurado en el plug-in (repositoryId); null hasta cargar la configuración.
+		repository: null,
 
 		postCreate: function() {
 			this.logEntry("postCreate");
 			this.inherited(arguments);
 
-			this._createRepositorySelector();
 			this.own(aspect.after(this.tabContainer, "removeChild", lang.hitch(this, this._updateCenterView)));
 			this._createTreeMenu();
 			this.setTreeItems([]);
@@ -117,13 +106,10 @@ function(declare,
 		loadContent: function() {
 			this.logEntry("loadContent");
 
-			if (!this.repository) {
-				this.setPaneDefaultLayoutRepository();
-			}
 			if (!this.isLoaded) {
 				this.isLoaded = true;
 				this.needReset = false;
-				this.refreshTree();
+				this._loadRepository();
 			}
 
 			this.logExit("loadContent");
@@ -141,37 +127,48 @@ function(declare,
 		},
 
 		/**
-		 * Requerido por _RepositorySelectorMixin: doRepositorySelectorConnections lo invoca al iniciar sesión y al
-		 * seleccionar otro repositorio. Ni el mixin ni _LaunchBarPane lo implementan (verificado en ICN 3.0.10).
-		 */
-		setRepository: function(repository) {
-			this.repository = repository;
-		},
-
-		/**
-		 * Recarga categorías y consultas desde el servicio de consultas.
+		 * Recarga "Consultas guardadas" con las consultas que devuelve el servicio de consultas.
 		 */
 		refreshTree: function() {
-			return all([
-				QueryStoreClient.listCategories(),
-				QueryStoreClient.listQueries({ sort: "name", limit: MAX_TREE_QUERIES }),
-				QueryStoreClient.listQueries({ sort: "recent", limit: RECENT_QUERIES })
-			]).then(lang.hitch(this, function(results) {
-				var items = array.map(results[0], function(category) {
-					return { id: "cat:" + category.id, name: category.name, type: "category", parent: "categories" };
-				});
-				array.forEach(results[1].items, function(query) {
-					items.push({ id: "q:" + query.id, name: query.name, type: "query", parent: "cat:" + query.categoryId, queryId: query.id });
-				});
-				array.forEach(results[2].items, function(query) {
-					items.push({ id: "recent:" + query.id, name: query.name, type: "query", parent: "recent", queryId: query.id });
-				});
-				this.setTreeItems(items);
-				this.treeMessageNode.textContent = results[1].total > results[1].items.length ?
-					"Se muestran las primeras " + results[1].items.length + " de " + results[1].total + " consultas." : "";
+			return QueryStoreClient.listQueries({ sort: "name", limit: MAX_TREE_QUERIES }).then(lang.hitch(this, function(page) {
+				this.setTreeItems(array.map(page.items, function(query) {
+					return { id: "q:" + query.id, name: query.name, type: "query", parent: "saved", queryId: query.id };
+				}));
+				this.treeMessageNode.textContent = page.total > page.items.length ?
+					"Se muestran las primeras " + page.items.length + " de " + page.total + " consultas." : "";
 			}), lang.hitch(this, function(error) {
 				this.treeMessageNode.textContent = "No se pudieron cargar las consultas: " + error.message;
 			}));
+		},
+
+		// El repositorio es el configurado en el plug-in (repositoryId); debe estar en el escritorio. Las demás
+		// llamadas al servicio lo necesitan, por eso el árbol se carga después.
+		_loadRepository: function() {
+			QueryStoreClient.getSettings().then(lang.hitch(this, function(settings) {
+				if (!settings.repositoryId) {
+					this._showRepositoryProblem("El administrador no ha configurado el repositorio de las consultas.");
+					return;
+				}
+				var repository = Desktop.getRepository(settings.repositoryId);
+				if (!repository) {
+					this._showRepositoryProblem("El repositorio \u201c" + settings.repositoryId +
+						"\u201d no está disponible en este escritorio.");
+					return;
+				}
+				this.repository = repository;
+				QueryStoreClient.repositoryId = repository.id;
+				this.repositoryNameNode.textContent = repository.name;
+				domClass.remove(this.newQueryLink, "dqDisabled");
+				this.newQueryLink.removeAttribute("aria-disabled");
+				this.refreshTree();
+			}), lang.hitch(this, function(error) {
+				this._showRepositoryProblem("No se pudo leer la configuración del plug-in: " + error.message);
+			}));
+		},
+
+		_showRepositoryProblem: function(message) {
+			domClass.add(this.repositoryNameNode, "dqRepositoryError");
+			this.repositoryNameNode.textContent = message;
 		},
 
 		/**
@@ -212,20 +209,10 @@ function(declare,
 		},
 
 		/**
-		 * Reemplaza las categorías y consultas del árbol. Cada item es { id, name, type: "category"|"query", parent },
-		 * donde parent es "recent", "categories" o el id de una categoría; las consultas llevan además queryId.
+		 * Reemplaza las consultas del árbol. Cada item es { id, name, type: "query", parent: "saved", queryId }.
 		 */
 		setTreeItems: function(items) {
-			this._treeItems = ROOT_ITEMS.concat(items || []);
-			this._renderTree();
-		},
-
-		// createRepositorySelector solo crea el widget; hay que ubicarlo en el DOM (verificado en ICN 3.0.10).
-		_createRepositorySelector: function() {
-			this.setRepositoryTypes("p8");
-			this.createRepositorySelector();
-			this.doRepositorySelectorConnections();
-			this.repositorySelector.placeAt(this.repositorySelectorArea);
+			this._renderTree(ROOT_ITEMS.concat(items || []));
 		},
 
 		/**
@@ -275,7 +262,9 @@ function(declare,
 
 		_onNewQueryClick: function(evt) {
 			evt.preventDefault();
-			this.openQueryTab(this.repository || Desktop.getDefaultRepository());
+			if (this.repository) {
+				this.openQueryTab(this.repository);
+			}
 		},
 
 		_findQueryTab: function(queryId) {
@@ -347,20 +336,15 @@ function(declare,
 			return this._newQueryCount === 1 ? "Nueva consulta" : "Nueva consulta " + this._newQueryCount;
 		},
 
-		_onFilterChange: function(value) {
-			this._filterText = value;
-			this._renderTree();
-		},
-
 		// Muestra las pestañas si hay alguna abierta; si no, el estado vacío.
 		_updateCenterView: function() {
 			var hasTabs = this.tabContainer.getChildren().length > 0;
 			this.centerStack.selectChild(hasTabs ? this.tabContainer : this.emptyPane);
 		},
 
-		_renderTree: function() {
+		_renderTree: function(treeItems) {
 			var store = new Memory({
-				data: this._filterTreeItems(this._filterText),
+				data: treeItems,
 				getChildren: function(object) {
 					return this.query({ parent: object.id });
 				}
@@ -398,37 +382,6 @@ function(declare,
 			});
 			this._tree.placeAt(this.treeNode);
 			this._tree.startup();
-		},
-
-		// Conserva las consultas cuyo nombre contiene el texto, junto con sus carpetas/categorías padre.
-		_filterTreeItems: function(filterText) {
-			var needle = this._normalize(filterText);
-			if (!needle) {
-				return this._treeItems;
-			}
-			var byId = {};
-			array.forEach(this._treeItems, function(item) {
-				byId[item.id] = item;
-			});
-			var keep = {};
-			array.forEach(ROOT_ITEMS, function(item) {
-				keep[item.id] = true;
-			});
-			array.forEach(this._treeItems, function(item) {
-				if (item.type === "query" && this._normalize(item.name).indexOf(needle) !== -1) {
-					for (var node = item; node && !keep[node.id]; node = byId[node.parent]) {
-						keep[node.id] = true;
-					}
-				}
-			}, this);
-			return array.filter(this._treeItems, function(item) {
-				return keep[item.id];
-			});
-		},
-
-		// Minúsculas y sin tildes, para que "busqueda" encuentre "Búsqueda".
-		_normalize: function(text) {
-			return (text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 		}
 	});
 });

@@ -14,7 +14,7 @@ import com.ibm.json.java.JSONArray;
 import com.ibm.json.java.JSONObject;
 
 /**
- * Modo simulado: guarda categorías y consultas en memoria del servidor de ICN mientras no exista la API externa.
+ * Modo simulado: guarda las consultas en memoria del servidor de ICN mientras no exista la API externa.
  * Aplica las mismas reglas que el contrato (validaciones, 404, 409, versión, auditoría) para que el cliente se
  * comporte igual que con la API real. Los datos son compartidos por todos los usuarios y se pierden al reiniciar.
  */
@@ -22,55 +22,17 @@ public class InMemoryQueryStore implements QueryStore {
 
 	public static final InMemoryQueryStore INSTANCE = new InMemoryQueryStore();
 
-	private static final int MAX_CATEGORY_NAME = 120;
 	private static final int MAX_QUERY_NAME = 200;
 
-	private final Map<String, JSONObject> categories = new LinkedHashMap<String, JSONObject>();
 	private final Map<String, JSONObject> queries = new LinkedHashMap<String, JSONObject>();
 
 	private InMemoryQueryStore() {
 	}
 
-	public synchronized JSONArray listCategories(String user) {
-		List<JSONObject> sorted = new ArrayList<JSONObject>();
-		for (JSONObject category : categories.values()) {
-			JSONObject copy = copy(category);
-			copy.put("queryCount", countQueries((String) category.get("id")));
-			sorted.add(copy);
-		}
-		Collections.sort(sorted, byString("name"));
-		JSONArray result = new JSONArray();
-		result.addAll(sorted);
-		return result;
-	}
-
-	public synchronized JSONObject createCategory(String user, JSONObject input) throws QueryStoreException {
-		String name = requiredText(input, "name", MAX_CATEGORY_NAME, "El nombre de la categoría");
-		for (JSONObject existing : categories.values()) {
-			if (normalize((String) existing.get("name")).equals(normalize(name))) {
-				throw new QueryStoreException(409, "CATEGORY_EXISTS", "Ya existe una categoría llamada “" + name + "”.");
-			}
-		}
-		JSONObject category = new JSONObject();
-		category.put("id", UUID.randomUUID().toString());
-		category.put("name", name);
-		category.put("description", optionalText(input, "description"));
-		stampCreated(category, user);
-		categories.put((String) category.get("id"), category);
-
-		JSONObject result = copy(category);
-		result.put("queryCount", 0L);
-		return result;
-	}
-
-	public synchronized JSONObject listQueries(String user, String categoryId, String name, String sort, int limit,
-			int offset) {
+	public synchronized JSONObject listQueries(String user, String name, String sort, int limit, int offset) {
 		String needle = name == null ? "" : normalize(name);
 		List<JSONObject> matches = new ArrayList<JSONObject>();
 		for (JSONObject query : queries.values()) {
-			if (categoryId != null && !categoryId.equals(query.get("categoryId"))) {
-				continue;
-			}
 			if (needle.length() > 0 && normalize((String) query.get("name")).indexOf(needle) < 0) {
 				continue;
 			}
@@ -130,17 +92,12 @@ public class InMemoryQueryStore implements QueryStore {
 
 	private void applyQueryInput(JSONObject query, JSONObject input) throws QueryStoreException {
 		String name = requiredText(input, "name", MAX_QUERY_NAME, "El nombre de la consulta");
-		String categoryId = requiredText(input, "categoryId", Integer.MAX_VALUE, "La categoría");
-		if (!categories.containsKey(categoryId)) {
-			throw new QueryStoreException(404, "CATEGORY_NOT_FOUND", "La categoría seleccionada ya no existe.");
-		}
 		Object definition = input.get("definition");
 		if (!(definition instanceof JSONObject)) {
 			throw new QueryStoreException(400, "VALIDATION_ERROR", "Falta la definición de la consulta.");
 		}
 		query.put("name", name);
 		query.put("description", optionalText(input, "description"));
-		query.put("categoryId", categoryId);
 		query.put("definition", definition);
 	}
 
@@ -152,19 +109,9 @@ public class InMemoryQueryStore implements QueryStore {
 		return query;
 	}
 
-	private long countQueries(String categoryId) {
-		long count = 0;
-		for (JSONObject query : queries.values()) {
-			if (categoryId.equals(query.get("categoryId"))) {
-				count++;
-			}
-		}
-		return count;
-	}
-
 	private static JSONObject summary(JSONObject query) {
 		JSONObject summary = new JSONObject();
-		for (String key : new String[] { "id", "name", "description", "categoryId", "createdBy", "createdAt",
+		for (String key : new String[] { "id", "name", "description", "createdBy", "createdAt",
 				"updatedBy", "updatedAt" }) {
 			summary.put(key, query.get(key));
 		}

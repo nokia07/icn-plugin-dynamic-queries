@@ -16,8 +16,9 @@ function(lang, Deferred, Request) {
 	function call(operation, params, body) {
 		var deferred = new Deferred();
 		var options = {
-			// "operation" y no "action": ICN usa action para el id del servicio y lo sobrescribe.
-			requestParams: lang.mixin({ operation: operation }, params),
+			// "operation" y no "action": ICN usa action para el id del servicio y lo sobrescribe. repositoryId lo
+			// necesita ICN en el servidor para identificar al usuario (PluginServiceCallbacks.getUserId).
+			requestParams: lang.mixin({ operation: operation, repositoryId: client.repositoryId || "" }, params),
 			requestCompleteCallback: function(response) {
 				if (response && response.ok) {
 					client.mode = response.mode;
@@ -29,8 +30,13 @@ function(lang, Deferred, Request) {
 					});
 				}
 			},
-			requestFailedCallback: function() {
-				deferred.reject({ code: "REQUEST_FAILED", message: "No se pudo comunicar con el servidor de ICN." });
+			// ICN la invoca con el estado HTTP como texto ("599 Error 599: ...") cuando el servidor responde con error.
+			requestFailedCallback: function(response) {
+				var status = /^\s*(\d{3})/.exec(typeof response === "string" ? response : "");
+				deferred.reject({
+					code: "REQUEST_FAILED",
+					message: "No se pudo comunicar con el servidor de ICN" + (status ? " (HTTP " + status[1] + ")" : "") + "."
+				});
 			}
 		};
 		if (body) {
@@ -46,16 +52,16 @@ function(lang, Deferred, Request) {
 		/** "memory" (modo simulado) o "api"; se conoce después de la primera respuesta. */
 		mode: null,
 
-		listCategories: function() {
-			return call("listCategories");
+		/** Repositorio configurado del plug-in; lo fija DQ tras getSettings. Todas las operaciones salvo getSettings lo
+		 *  necesitan. */
+		repositoryId: null,
+
+		/** { repositoryId }: configuración del plug-in que necesita el navegador ("" si no está configurado). */
+		getSettings: function() {
+			return call("getSettings");
 		},
 
-		/** category: { name, description } */
-		createCategory: function(category) {
-			return call("createCategory", null, category);
-		},
-
-		/** params: { categoryId, name, sort: "name"|"recent", limit, offset } */
+		/** params: { name, sort: "name"|"recent", limit, offset } */
 		listQueries: function(params) {
 			return call("listQueries", params);
 		},
@@ -64,7 +70,7 @@ function(lang, Deferred, Request) {
 			return call("getQuery", { id: id });
 		},
 
-		/** query: { id?, version?, name, description, categoryId, definition }. Con id actualiza. */
+		/** query: { id?, version?, name, description, definition }. Con id actualiza. */
 		saveQuery: function(query) {
 			return call("saveQuery", null, query);
 		},

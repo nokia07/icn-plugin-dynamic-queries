@@ -19,8 +19,22 @@
 	border-right: 1px solid #e0e0e0;
 }
 
-.dqPane .dqRepositorySelector {
+/* Repositorio configurado: solo lectura, con el aspecto del selector de ICN */
+.dqPane .dqRepository {
 	margin-bottom: 12px;
+	padding: 11px 16px;
+	background: #f4f4f4;
+	border-bottom: 1px solid #8d8d8d;
+	color: #161616;
+	font-size: 14px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dqPane .dqRepository.dqRepositoryError {
+	color: #da1e28;
+	white-space: normal;
 }
 
 .dqPane .dqNewQueryRow {
@@ -38,12 +52,11 @@
 	text-decoration: underline;
 }
 
-.dqPane .dqFilterRow {
-	margin-bottom: 12px;
-}
-
-.dqPane .dqFilterBox {
-	width: 100%;
+/* Sin repositorio configurado no se pueden crear consultas. !important: el tema de ICN impone el color de los enlaces */
+.dqPane .dqLink.dqDisabled {
+	color: #8d8d8d !important;
+	cursor: default;
+	pointer-events: none;
 }
 
 .dqPane .dqTree .dijitTreeRow {
@@ -77,7 +90,8 @@
 	margin-bottom: 8px;
 }
 
-/* Botones de guardar en P8 del constructor de ICN; !important porque ICN los vuelve a mostrar al restablecer */
+/* Partes del constructor de ICN que DQ no usa (guardar en P8, "Buscar en", "Opciones de búsqueda"); !important porque
+   ICN vuelve a mostrar algunas al restablecer */
 .dqPane .dqHiddenAction {
 	display: none !important;
 }
