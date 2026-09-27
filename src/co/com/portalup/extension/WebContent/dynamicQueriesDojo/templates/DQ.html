@@ -11,9 +11,11 @@
 			class="dqNavPane">
 			<div class="dqRepository" data-dojo-attach-point="repositoryNameNode" title="Repositorio de las consultas"></div>
 			<div class="dqNewQueryRow">
-				<a href="#" role="button" class="dqLink dqDisabled" aria-disabled="true"
-					data-dojo-attach-point="newQueryLink"
-					data-dojo-attach-event="onclick: _onNewQueryClick">Nueva consulta</a>
+				<button type="button" data-dojo-type="dijit/form/Button"
+					data-dojo-attach-point="newQueryButton"
+					data-dojo-attach-event="onClick: _onNewQueryClick"
+					data-dojo-props="disabled:true"
+					class="dqNewQueryButton">Nueva consulta</button>
 			</div>
 			<div data-dojo-attach-point="treeNode" class="dqTree"></div>
 			<div data-dojo-attach-point="treeMessageNode" class="dqTreeMessage" role="status"></div>

@@ -22,7 +22,8 @@ define([
 	"idx/layout/BorderContainer",
 	"dijit/layout/ContentPane",
 	"dijit/layout/StackContainer",
-	"dijit/layout/TabContainer"
+	"dijit/layout/TabContainer",
+	"dijit/form/Button"
 ],
 function(declare,
 		lang,
@@ -158,8 +159,7 @@ function(declare,
 				this.repository = repository;
 				QueryStoreClient.repositoryId = repository.id;
 				this.repositoryNameNode.textContent = repository.name;
-				domClass.remove(this.newQueryLink, "dqDisabled");
-				this.newQueryLink.removeAttribute("aria-disabled");
+				this.newQueryButton.set("disabled", false);
 				this.refreshTree();
 			}), lang.hitch(this, function(error) {
 				this._showRepositoryProblem("No se pudo leer la configuración del plug-in: " + error.message);
@@ -260,8 +260,7 @@ function(declare,
 			this.openQueryTab(repository, searchTemplate);
 		},
 
-		_onNewQueryClick: function(evt) {
-			evt.preventDefault();
+		_onNewQueryClick: function() {
 			if (this.repository) {
 				this.openQueryTab(this.repository);
 			}

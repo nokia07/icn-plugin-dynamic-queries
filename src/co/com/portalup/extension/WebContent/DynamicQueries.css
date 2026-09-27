@@ -41,22 +41,11 @@
 	margin: 4px 0 12px;
 }
 
-.dqPane .dqLink {
-	color: #0f62fe;
-	font-size: 16px;
-	text-decoration: none;
-}
-
-.dqPane .dqLink:hover,
-.dqPane .dqLink:focus {
-	text-decoration: underline;
-}
-
-/* Sin repositorio configurado no se pueden crear consultas. !important: el tema de ICN impone el color de los enlaces */
-.dqPane .dqLink.dqDisabled {
-	color: #8d8d8d !important;
-	cursor: default;
-	pointer-events: none;
+/* "Nueva consulta" ocupa el ancho del panel, como el recuadro del repositorio */
+.dqPane .dqNewQueryButton,
+.dqPane .dqNewQueryButton .dijitButtonNode {
+	width: 100%;
+	box-sizing: border-box;
 }
 
 .dqPane .dqTree .dijitTreeRow {

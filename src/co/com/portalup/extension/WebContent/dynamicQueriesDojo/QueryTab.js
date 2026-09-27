@@ -39,6 +39,30 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 		});
 	}
 
+	// Deja el desplegable de clases solo con el árbol e "Incluir subclases": quita "Buscar en varias clases" e "Incluir
+	// todas las propiedades". ICN crea esas casillas antes de QueryTab.postCreate y otros métodos del selector las usan
+	// sin comprobar que existan, así que no se destruyen: se ocultan con su etiqueta y ayuda, y quedan desmarcadas y
+	// deshabilitadas para que su onChange (el modo de varias clases) no pueda dispararse. dijitHidden y no
+	// dqHiddenAction: el desplegable se abre fuera de .dqPane.
+	function simplifyClassSelector(classSelector) {
+		array.forEach([
+			{ checkBox: classSelector._multipleClassesChk, areaClass: "multClassChkBoxArea" },
+			{ checkBox: classSelector._includeAllPropertiesChk, areaClass: "includeAllPropertiesArea" }
+		], function(option) {
+			if (!option.checkBox) {
+				return;
+			}
+			option.checkBox.set("checked", false);
+			option.checkBox.set("disabled", true);
+			for (var area = option.checkBox.domNode; area; area = area.parentNode) {
+				if (domClass.contains(area, option.areaClass)) {
+					domClass.add(area, "dijitHidden");
+					break;
+				}
+			}
+		});
+	}
+
 	// Configura el módulo Toolbar2 dentro de la estructura de módulos de la lista de resultados.
 	function configureResultsToolbar(node) {
 		if (lang.isArray(node)) {
@@ -92,6 +116,11 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 			// "Visualización de resultados" y la casilla "Mostrar todas las propiedades" (con su etiqueta).
 			domClass.add(searchDefinition.resultsDisplayButton.domNode, "dqHiddenAction");
 			domClass.add(searchDefinition._displayAllPropsArea, "dqHiddenAction");
+			var classSelector = searchDefinition.contentClassSelector;
+			simplifyClassSelector(classSelector);
+			this.own(aspect.after(classSelector, "_createDropDown", function() {
+				simplifyClassSelector(classSelector);
+			}, true));
 
 			var saveQueryButton = new Button({
 				label: "Guardar consulta",

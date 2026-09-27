@@ -30,6 +30,16 @@ oculta esa fila con la clase `dqHiddenAction`: las consultas siempre usan los va
 También oculta "Visualización de resultados" (`resultsDisplayButton`) y la casilla "Mostrar todas las propiedades"
 (`_displayAllPropsArea`, un `<span>` con la casilla y su etiqueta).
 
+**"Buscar en varias clases"** (desplegable de `SearchClassSelector`): `BasicSearchDefinition._initContentClassSelector`
+fija `allowMultipleClasses = repository.supportsMultiClassSearch` y el selector crea la casilla (`_multipleClassesChk`,
+dentro de un `div.multClassChkBoxArea` con su etiqueta y ayuda) en `_createDropDown`, **antes** del `postCreate` del
+`SearchBuilder`. Su `onChange` llama a `_showMultipleClasses` (paneles de clases seleccionadas, desmarca "Incluir
+subclases"). `_buildSelectedGrid` hace `this._multipleClassesChk.set(...)` al abrir el desplegable sin comprobar que
+exista: no se puede destruir. DQ la oculta (`dijitHidden`: el desplegable se abre fuera de `.dqPane`), la desmarca y
+la deshabilita. Lo mismo con **"Incluir todas las propiedades"** (`_includeAllPropertiesChk` en
+`div.includeAllPropertiesArea`, activada con `allowIncludeAllProperties = repository._isP8()`; ICN la deja
+deshabilitada salvo en el modo de varias clases y la usan `setIncludeAllProperties`, `setLabel` y `destroy`).
+
 **Barra de la lista de resultados.** `SearchBuilder.getContentListModules()` arma los módulos de la `ContentList`; la
 barra es `{ moduleClass: ecm/widget/listView/modules/Toolbar2 }` dentro de un módulo `Bar`, y las propiedades extra de
 esa configuración se aplican a la instancia del módulo. `showActionsButton: false` quita "Acciones", y
