@@ -505,8 +505,8 @@ components:
               example: '{0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0}'
             folderPath:
               type: string
-              description: Ruta como la muestra ICN; solo informativa.
-              example: \Proteccion
+              description: Ruta de la carpeta en P8 (`/` es la raíz del object store).
+              example: /Carga CRM
             includeSubfolders:
               type: boolean
         documentClass:
@@ -678,7 +678,7 @@ components:
           objectType: document
           scope:
             folderId: '{0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0}'
-            folderPath: \Proteccion
+            folderPath: /
             includeSubfolders: true
           documentClass:
             symbolicName: Document

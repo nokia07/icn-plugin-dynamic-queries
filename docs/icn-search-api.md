@@ -35,7 +35,15 @@ Del contenedor solo se usan (verificado en la Fase 2):
 
 Al pulsar Buscar, ICN 3.0.10 registra `TypeError: Cannot read properties of undefined (reading 'onRequestCompleted')`
 en `BasicSearchDefinition._executeSearch`. Ocurre igual en la búsqueda nativa de ICN y los resultados se muestran bien;
-no es un problema del plug-in.
+no es un problema del plug-in. Si se llama a `_search()` desde código, el error se lanza al llamador (después de enviar
+la búsqueda): `QueryTab.runSearch` lo captura y lo registra.
+
+## Widgets de ICN en plantillas propias
+
+- El `TextBox` que ICN usa en lugar de `dijit/form/TextBox` todavía no tiene su nodo de texto en el `postCreate` del
+  widget que lo contiene: `get("value")` falla ahí. Guardar el valor en `onChange` en lugar de leerlo.
+- `dijit/Menu` con `selector` sobre el contenedor del árbol sigue funcionando aunque el árbol se vuelva a dibujar;
+  `menu.currentTarget` es la fila sobre la que se abrió.
 
 ## Leer lo que definió el usuario
 
@@ -73,6 +81,41 @@ Todas en `BasicSearchDefinition` (`searchBuilder.searchDefinition`); es lo que u
 
 Formato de los valores en `SearchCriterion.values`: todo llega como texto, con un `""` sobrante al final. Las fechas
 (`xs:timestamp`, formato de pantalla `d/M/yyyy`) llegan en ISO-8601 con zona horaria: `2026-03-15T00:00:00.000-05:00`.
+
+## Reabrir una consulta guardada en el constructor
+
+ICN abre sus búsquedas guardadas así: `retrieveSearchCriteria` pide la búsqueda al servidor y
+`SearchTemplate._applyRetrievedSearchCriteria(respuesta)` arma el modelo. Si la plantilla **ya tiene
+`searchCriteria`**, `retrieveSearchCriteria` no llama al servidor. `QuerySerializer.toSearchTemplate` aprovecha eso:
+convierte la definición al formato de esa respuesta (`toIcnSearch`), la aplica a un `SearchTemplate` nuevo y lo pasa
+al `SearchBuilder`, que dibuja la consulta completa (carpeta, clase, opciones, condiciones, rangos, grupos).
+
+Formato de la respuesta que acepta `_applyRetrievedSearchCriteria`:
+
+```js
+{
+  andSearch: true, objectType: "document",
+  search_classes: [ { name: "Document", displayName: "Documento", searchSubclasses: true, objectType: "document" } ],
+  search_folders: [ { id: "{GUID carpeta}", pathName: "/Carga CRM", objectStoreId: "{GUID os}",
+                      objectStoreName: "Proteccion", searchSubfolders: true, view: "editable" } ],
+  moreOptions: { versionOption: "releasedversion", objectType: "document" },
+  criterias: [
+    { name: "DocumentTitle", label: "Título del documento", dataType: "xs:string",
+      selectedOperator: "STARTSWITH", values: ["POL-"] },
+    { anded: false, searchCriteria: [ /* criterios o grupos */ ] }          // grupo
+  ],
+  resultsDisplay: { columns: ["{NAME}", "DateCreated"], sortBy: "DateCreated", sortAsc: false }
+}
+```
+
+- `isNew()` es verdadero si el id está vacío o empieza por `NewSearch_`; con ese id ICN la trata como búsqueda nueva.
+- `pathName` es la ruta de P8 (`/` es la raíz; `ContentItem.attributes.PathName`), no la que se muestra
+  (`\Proteccion\Carga CRM`).
+- El constructor **reemplaza la visualización de resultados** por la predeterminada al cargar la clase:
+  `setContentClass` y enseguida `resultsDisplayOptions.setResultsDisplay(predeterminada)`. Hay que volver a aplicar la
+  guardada después de ese primer `setResultsDisplay`; en ese momento el formulario ya está listo para buscar.
+- El texto "Se están mostrando resultados para: Nueva búsqueda" no toma el nombre de la consulta (ni con
+  `searchTemplate.name` ni con `_newSearchName`); queda así.
 
 ## Guardar
 

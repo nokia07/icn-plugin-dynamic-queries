@@ -1,7 +1,8 @@
 define([
-	"dojo/_base/array"
+	"dojo/_base/array",
+	"ecm/model/SearchTemplate"
 ],
-function(array) {
+function(array, SearchTemplate) {
 
 	// Traducciones de ICN al vocabulario del contrato (docs/api/dynamic-queries.openapi.yaml).
 	// Valores de ICN verificados en 3.0.10; ver docs/icn-search-api.md.
@@ -39,6 +40,17 @@ function(array) {
 		currentversion: "currentVersion",
 		allversions: "allVersions"
 	};
+
+	function invert(map) {
+		var inverted = {};
+		for (var key in map) {
+			inverted[map[key]] = key;
+		}
+		return inverted;
+	}
+	var ICN_OPERATORS = invert(OPERATORS);
+	var ICN_DATA_TYPES = invert(DATA_TYPES);
+	var ICN_VERSIONS = invert(VERSIONS);
 
 	var NO_VALUE_OPERATORS = { IS_NULL: true, IS_NOT_NULL: true };
 	var RANGE_OPERATORS = { BETWEEN: true, NOT_BETWEEN: true };
@@ -111,6 +123,39 @@ function(array) {
 		return match ? match[0] : itemId;
 	}
 
+	// Ruta de P8 ("/Carga CRM"; "/" es la raíz), que es la que usa ICN al reconstruir la búsqueda. Si el item no trae
+	// PathName se deduce de la ruta que muestra ICN ("\Proteccion\Carga CRM").
+	function folderPath(folder, repository) {
+		var attributes = folder.item.attributes;
+		if (attributes && attributes.PathName) {
+			return attributes.PathName;
+		}
+		var prefix = "\\" + repository.objectStoreName;
+		var path = folder.path.indexOf(prefix) === 0 ? folder.path.substring(prefix.length) : folder.path;
+		return path.replace(/\\/g, "/") || "/";
+	}
+
+	// Nodo del contrato → criterio o grupo en el formato con que ICN devuelve una búsqueda guardada
+	// (lo consume SearchTemplate._applyRetrievedSearchCriteria).
+	function toIcnNode(node) {
+		if (node.type === "group") {
+			return { anded: node.match === "ALL", searchCriteria: array.map(node.criteria, toIcnNode) };
+		}
+		var operator = ICN_OPERATORS[node.operator];
+		var dataType = ICN_DATA_TYPES[node.dataType];
+		if (!operator || !dataType) {
+			throw new Error("La consulta guardada usa un operador (" + node.operator + ") o tipo de dato (" +
+				node.dataType + ") que el plug-in no reconoce.");
+		}
+		return {
+			name: node.property,
+			label: node.label || node.property,
+			dataType: dataType,
+			selectedOperator: operator,
+			values: array.map(node.values, String)
+		};
+	}
+
 	return {
 		SCHEMA_VERSION: "1.0",
 
@@ -144,7 +189,7 @@ function(array) {
 			if (state.folder && state.folder.item) {
 				definition.scope = {
 					folderId: folderGuid(state.folder.item.id),
-					folderPath: state.folder.path,
+					folderPath: folderPath(state.folder, state.repository),
 					includeSubfolders: !!state.folder.includeSubfolders
 				};
 			}
@@ -179,6 +224,58 @@ function(array) {
 			}
 
 			return { definition: definition, errors: errors };
+		},
+
+		/**
+		 * Inverso de build: convierte una definición del contrato en el formato con que ICN devuelve una búsqueda
+		 * guardada. repository es el ecm.model.Repository donde se ejecuta (aporta el id del object store).
+		 */
+		toIcnSearch: function(definition, repository) {
+			var objectType = definition.objectType || "document";
+			var icnSearch = {
+				andSearch: definition.match !== "ANY",
+				objectType: objectType,
+				search_classes: [ {
+					name: definition.documentClass.symbolicName,
+					displayName: definition.documentClass.displayName || definition.documentClass.symbolicName,
+					searchSubclasses: !!definition.documentClass.includeSubclasses,
+					objectType: objectType
+				} ],
+				moreOptions: {
+					objectType: objectType,
+					versionOption: ICN_VERSIONS[definition.versionSelection] || "releasedversion"
+				},
+				criterias: array.map(definition.criteria, toIcnNode)
+			};
+			if (definition.scope) {
+				icnSearch.search_folders = [ {
+					id: definition.scope.folderId,
+					pathName: definition.scope.folderPath,
+					objectStoreId: repository.objectStoreId,
+					objectStoreName: repository.objectStoreName,
+					searchSubfolders: !!definition.scope.includeSubfolders,
+					view: "editable"
+				} ];
+			}
+			if (definition.resultsDisplay) {
+				icnSearch.resultsDisplay = {
+					columns: definition.resultsDisplay.columns,
+					sortBy: definition.resultsDisplay.sortBy,
+					sortAsc: !!definition.resultsDisplay.sortAscending
+				};
+			}
+			return icnSearch;
+		},
+
+		/**
+		 * SearchTemplate listo para abrir en el constructor con la definición guardada. Como ya trae sus criterios,
+		 * retrieveSearchCriteria no consulta al servidor; el id "NewSearch_…" hace que ICN la trate como búsqueda nueva
+		 * (no guardada en P8). Lanza Error si la definición usa operadores o tipos desconocidos.
+		 */
+		toSearchTemplate: function(definition, repository, name) {
+			var searchTemplate = new SearchTemplate({ id: "NewSearch_dq_" + new Date().getTime(), name: name, repository: repository });
+			searchTemplate._applyRetrievedSearchCriteria(this.toIcnSearch(definition, repository));
+			return searchTemplate;
 		},
 
 		/**

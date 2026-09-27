@@ -50,6 +50,12 @@
 	padding: 4px 0;
 }
 
+.dqPane .dqTreeMessage {
+	margin-top: 8px;
+	color: #525252;
+	font-size: 12px;
+}
+
 .dqPane .dqQueryIcon {
 	width: 16px;
 	height: 16px;

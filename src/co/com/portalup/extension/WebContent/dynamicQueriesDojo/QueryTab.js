@@ -2,6 +2,7 @@ define([
 	"dojo/_base/declare",
 	"dojo/_base/lang",
 	"dojo/_base/array",
+	"dojo/aspect",
 	"dojo/dom-class",
 	"dojo/dom-construct",
 	"dijit/Dialog",
@@ -10,7 +11,7 @@ define([
 	"dynamicQueriesDojo/QuerySerializer",
 	"dynamicQueriesDojo/SaveQueryDialog"
 ],
-function(declare, lang, array, domClass, domConstruct, Dialog, Button, SearchBuilder, QuerySerializer,
+function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, SearchBuilder, QuerySerializer,
 		SaveQueryDialog) {
 
 	/**
@@ -25,6 +26,13 @@ function(declare, lang, array, domClass, domConstruct, Dialog, Button, SearchBui
 
 		// Consulta guardada que muestra la pestaña ({ id, version, name, description, categoryId }); null si es nueva.
 		savedQuery: null,
+
+		// Visualización de resultados guardada ({ columns, sortBy, sortAsc }): el constructor la reemplaza por la
+		// predeterminada al cargar la clase, así que se vuelve a aplicar después.
+		initialResultsDisplay: null,
+
+		// true para ejecutar la búsqueda apenas el formulario termine de cargar ("Ejecutar" desde el árbol).
+		runOnOpen: false,
 
 		postCreate: function() {
 			this.inherited(arguments);
@@ -46,12 +54,41 @@ function(declare, lang, array, domClass, domConstruct, Dialog, Button, SearchBui
 			});
 			this.own(viewJsonButton);
 			viewJsonButton.placeAt(searchDefinition.cancelButton.domNode, "after");
+
+			if (this.initialResultsDisplay || this.runOnOpen) {
+				// El formulario queda listo cuando ICN fija la visualización de resultados de la clase (verificado en
+				// ICN 3.0.10: setContentClass y enseguida setResultsDisplay con la predeterminada).
+				var resultsDisplayOptions = searchDefinition.resultsDisplayOptions;
+				var formReady = aspect.after(resultsDisplayOptions, "setResultsDisplay", lang.hitch(this, function() {
+					formReady.remove();
+					if (this.initialResultsDisplay) {
+						resultsDisplayOptions.setResultsDisplay(lang.clone(this.initialResultsDisplay));
+					}
+					if (this.runOnOpen) {
+						this.runSearch();
+					}
+				}), true);
+				this.own(formReady);
+			}
 		},
 
 		// dijit/layout/TabContainer.closeChild solo cierra la pestaña si onClose devuelve true; SearchBuilder no lo
 		// define porque en ICN lo cierra SearchTabContainer.
 		onClose: function() {
 			return true;
+		},
+
+		/**
+		 * Ejecuta la búsqueda como el botón Buscar. En ICN 3.0.10 BasicSearchDefinition._search lanza
+		 * "Cannot read properties of undefined (reading 'onRequestCompleted')" después de enviar la búsqueda (también
+		 * en la búsqueda nativa; ver docs/icn-search-api.md): se registra para que no interrumpa a quien llama.
+		 */
+		runSearch: function() {
+			try {
+				this.searchDefinition._search();
+			} catch (e) {
+				this.logWarning("runSearch", "Error de ICN al lanzar la búsqueda: " + e.message);
+			}
 		},
 
 		/**
