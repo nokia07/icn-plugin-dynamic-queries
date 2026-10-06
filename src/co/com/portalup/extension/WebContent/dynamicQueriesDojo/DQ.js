@@ -15,6 +15,7 @@ define([
 	"ecm/widget/dialog/ConfirmationDialog",
 	"ecm/widget/dialog/MessageDialog",
 	"ecm/widget/layout/_LaunchBarPane",
+	"dynamicQueriesDojo/NewProjectDialog",
 	"dynamicQueriesDojo/QuerySerializer",
 	"dynamicQueriesDojo/QueryStoreClient",
 	"dynamicQueriesDojo/QueryTab",
@@ -41,6 +42,7 @@ function(declare,
 		ConfirmationDialog,
 		MessageDialog,
 		_LaunchBarPane,
+		NewProjectDialog,
 		QuerySerializer,
 		QueryStoreClient,
 		QueryTab,
@@ -264,6 +266,14 @@ function(declare,
 			if (this.repository) {
 				this.openQueryTab(this.repository);
 			}
+		},
+
+		_onNewProjectClick: function() {
+			var dialog = new NewProjectDialog();
+			dialog.own(dialog.on("hide", function() {
+				dialog.destroyRecursive();
+			}));
+			dialog.show();
 		},
 
 		_findQueryTab: function(queryId) {

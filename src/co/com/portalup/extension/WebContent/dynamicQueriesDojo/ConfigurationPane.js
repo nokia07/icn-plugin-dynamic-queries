@@ -22,6 +22,9 @@ define([
 		templateString: template,
 		widgetsInTemplate: true,
 
+		// Debe coincidir con PluginConfiguration.DEFAULT_PROJECTS_API_URL, que el servidor usa mientras no se guarde otra.
+		defaultProjectsApiUrl: "http://localhost:8080/api/v1",
+
 		load: function(callback) {
 			var values = {};
 			if (this.configurationString) {
@@ -35,6 +38,8 @@ define([
 			this.apiUrlField.set("value", values.apiUrl || "", false);
 			this.apiTokenField.set("value", values.apiToken || "", false);
 			this.timeoutField.set("value", values.timeoutSeconds || "", false);
+			this.projectsApiUrlField.set("value",
+				"projectsApiUrl" in values ? values.projectsApiUrl || "" : this.defaultProjectsApiUrl, false);
 		},
 
 		// Repositorios P8 configurados en ICN (no solo los de un escritorio): el plug-in es global.
@@ -64,14 +69,16 @@ define([
 					{ name: "repositoryId", value: this.repositoryIdField.get("value") },
 					{ name: "apiUrl", value: this.apiUrlField.get("value") },
 					{ name: "apiToken", value: this.apiTokenField.get("value") },
-					{ name: "timeoutSeconds", value: this.timeoutField.get("value") }
+					{ name: "timeoutSeconds", value: this.timeoutField.get("value") },
+					{ name: "projectsApiUrl", value: this.projectsApiUrlField.get("value") }
 				]
 			});
 			this.onSaveNeeded(true);
 		},
 
 		validate: function() {
-			return !!this.repositoryIdField.get("value") && this.apiUrlField.isValid() && this.timeoutField.isValid();
+			return !!this.repositoryIdField.get("value") && this.apiUrlField.isValid() && this.timeoutField.isValid() &&
+				this.projectsApiUrlField.isValid();
 		}
 	});
 });

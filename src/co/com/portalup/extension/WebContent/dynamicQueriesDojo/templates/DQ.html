@@ -4,7 +4,7 @@
 		data-dojo-props="gutters:false, liveSplitters:true"
 		class="dqMainContainer">
 
-		<!-- Panel izquierdo: repositorio configurado, nueva consulta y consultas guardadas -->
+		<!-- Panel izquierdo: repositorio configurado, nueva consulta, nuevo proyecto y consultas guardadas -->
 		<div data-dojo-type="dijit/layout/ContentPane"
 			data-dojo-attach-point="navPane"
 			data-dojo-props="region:'leading', splitter:true"
@@ -16,6 +16,10 @@
 					data-dojo-attach-event="onClick: _onNewQueryClick"
 					data-dojo-props="disabled:true"
 					class="dqNewQueryButton">Nueva consulta</button>
+				<button type="button" data-dojo-type="dijit/form/Button"
+					data-dojo-attach-point="newProjectButton"
+					data-dojo-attach-event="onClick: _onNewProjectClick"
+					class="dqNewProjectButton">Nuevo proyecto</button>
 			</div>
 			<div data-dojo-attach-point="treeNode" class="dqTree"></div>
 			<div data-dojo-attach-point="treeMessageNode" class="dqTreeMessage" role="status"></div>

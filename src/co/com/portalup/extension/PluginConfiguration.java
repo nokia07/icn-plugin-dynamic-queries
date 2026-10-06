@@ -16,6 +16,10 @@ public final class PluginConfiguration {
 	/** Token de servicio (Bearer) para la API. */
 	public static final String API_TOKEN = "apiToken";
 	public static final String TIMEOUT_SECONDS = "timeoutSeconds";
+	/** URL base del microservicio de proyectos (p. ej. http://servidor:8080/api/v1); los proyectos se crean en {url}/project. */
+	public static final String PROJECTS_API_URL = "projectsApiUrl";
+	/** URL de PROJECTS_API_URL mientras el administrador no la guarde (despliegue local). Debe coincidir con ConfigurationPane.js. */
+	public static final String DEFAULT_PROJECTS_API_URL = "http://localhost:8080/api/v1";
 	/** Id (en ICN) del único repositorio sobre el que se diseñan y ejecutan las consultas. */
 	public static final String REPOSITORY_ID = "repositoryId";
 

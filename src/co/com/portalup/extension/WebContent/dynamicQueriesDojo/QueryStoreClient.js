@@ -77,6 +77,11 @@ function(lang, Deferred, Request) {
 
 		deleteQuery: function(id) {
 			return call("deleteQuery", { id: id });
+		},
+
+		/** project: { name, description }. Lo crea en el servicio de proyectos; se resuelve con lo que devuelva ese servicio. */
+		createProject: function(project) {
+			return call("createProject", null, project);
 		}
 	};
 

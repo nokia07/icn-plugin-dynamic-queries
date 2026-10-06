@@ -15,7 +15,7 @@ import com.ibm.json.java.JSONObject;
  * Servicio del plug-in que usa el feature DQ para guardar y leer consultas. El navegador nunca llama a la API externa:
  * este servicio agrega el usuario de ICN y el token de servicio, que no salen del servidor.
  *
- * Parámetro operation: getSettings | listQueries | getQuery | saveQuery | deleteQuery. Las operaciones con cuerpo lo reciben como JSON. No se llama "action" porque ICN usa ese parámetro para
+ * Parámetro operation: getSettings | listQueries | getQuery | saveQuery | deleteQuery | createProject. Las operaciones con cuerpo lo reciben como JSON. No se llama "action" porque ICN usa ese parámetro para
  * el id del servicio. La respuesta siempre es HTTP 200 con { ok: true, mode, data } o { ok: false, mode, error: { status, code,
  * message } }, para que el cliente muestre el error en su propio diálogo.
  *
@@ -80,7 +80,8 @@ public class QueryStoreService extends PluginService {
 				result.put("mode", "api");
 			}
 
-			result.put("data", dispatch(store, config, operation, user, request));
+			result.put("data", "createProject".equals(operation) ? createProject(config, user, request)
+					: dispatch(store, config, operation, user, request));
 			result.put("ok", Boolean.TRUE);
 		} catch (QueryStoreException e) {
 			logger.logWarning(this, "handle",
@@ -126,6 +127,35 @@ public class QueryStoreService extends PluginService {
 			return null;
 		}
 		throw new QueryStoreException(400, "UNKNOWN_OPERATION", "Operación no soportada: " + operation);
+	}
+
+	/**
+	 * Crea un proyecto en el microservicio de proyectos (POST {projectsApiUrl}/project con { name, description }). Si
+	 * la configuración nunca guardó la URL se usa la predeterminada; si el administrador la dejó vacía, responde con
+	 * error (no hay modo simulado).
+	 */
+	private static Object createProject(JSONObject config, String user, HttpServletRequest request)
+			throws QueryStoreException {
+		String baseUrl = config.containsKey(PluginConfiguration.PROJECTS_API_URL)
+				? PluginConfiguration.get(config, PluginConfiguration.PROJECTS_API_URL)
+				: PluginConfiguration.DEFAULT_PROJECTS_API_URL;
+		if (baseUrl.length() == 0) {
+			throw new QueryStoreException(503, "NOT_CONFIGURED",
+					"El servicio de proyectos no está configurado. Pida al administrador que configure su URL en el plug-in.");
+		}
+		JSONObject body = readBody(request);
+		Object name = body.get("name");
+		Object description = body.get("description");
+		if (!(name instanceof String) || ((String) name).trim().length() == 0) {
+			throw new QueryStoreException(400, "VALIDATION_ERROR", "El nombre del proyecto es obligatorio.");
+		}
+		JSONObject project = new JSONObject();
+		project.put("name", ((String) name).trim());
+		project.put("description", description instanceof String ? ((String) description).trim() : "");
+		int timeout = parseInt(PluginConfiguration.get(config, PluginConfiguration.TIMEOUT_SECONDS),
+				DEFAULT_TIMEOUT_SECONDS);
+		return new RestClient(baseUrl, PluginConfiguration.get(config, PluginConfiguration.API_TOKEN), timeout * 1000,
+				"el servicio de proyectos").send("POST", "/project", user, project);
 	}
 
 	/** Con repositorio configurado, las consultas solo pueden usar ese repositorio. */

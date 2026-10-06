@@ -41,11 +41,17 @@
 	margin: 4px 0 12px;
 }
 
-/* "Nueva consulta" ocupa el ancho del panel, como el recuadro del repositorio */
+/* "Nueva consulta" y "Nuevo proyecto" ocupan el ancho del panel, como el recuadro del repositorio */
 .dqPane .dqNewQueryButton,
-.dqPane .dqNewQueryButton .dijitButtonNode {
+.dqPane .dqNewQueryButton .dijitButtonNode,
+.dqPane .dqNewProjectButton,
+.dqPane .dqNewProjectButton .dijitButtonNode {
 	width: 100%;
 	box-sizing: border-box;
+}
+
+.dqPane .dqNewProjectButton {
+	margin-top: 6px;
 }
 
 .dqPane .dqTree .dijitTreeRow {
