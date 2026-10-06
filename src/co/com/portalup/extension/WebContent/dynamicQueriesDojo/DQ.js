@@ -15,7 +15,8 @@ define([
 	"ecm/widget/dialog/ConfirmationDialog",
 	"ecm/widget/dialog/MessageDialog",
 	"ecm/widget/layout/_LaunchBarPane",
-	"dynamicQueriesDojo/NewProjectDialog",
+	"dynamicQueriesDojo/ProjectsDialog",
+	"dynamicQueriesDojo/ProjectServiceClient",
 	"dynamicQueriesDojo/QuerySerializer",
 	"dynamicQueriesDojo/QueryStoreClient",
 	"dynamicQueriesDojo/QueryTab",
@@ -42,7 +43,8 @@ function(declare,
 		ConfirmationDialog,
 		MessageDialog,
 		_LaunchBarPane,
-		NewProjectDialog,
+		ProjectsDialog,
+		ProjectServiceClient,
 		QuerySerializer,
 		QueryStoreClient,
 		QueryTab,
@@ -148,6 +150,7 @@ function(declare,
 		// llamadas al servicio lo necesitan, por eso el árbol se carga después.
 		_loadRepository: function() {
 			QueryStoreClient.getSettings().then(lang.hitch(this, function(settings) {
+				ProjectServiceClient.baseUrl = settings.projectsApiUrl || "";
 				if (!settings.repositoryId) {
 					this._showRepositoryProblem("El administrador no ha configurado el repositorio de las consultas.");
 					return;
@@ -268,8 +271,8 @@ function(declare,
 			}
 		},
 
-		_onNewProjectClick: function() {
-			var dialog = new NewProjectDialog();
+		_onProjectsClick: function() {
+			var dialog = new ProjectsDialog();
 			dialog.own(dialog.on("hide", function() {
 				dialog.destroyRecursive();
 			}));

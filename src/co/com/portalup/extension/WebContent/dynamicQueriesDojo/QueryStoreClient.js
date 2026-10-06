@@ -56,7 +56,7 @@ function(lang, Deferred, Request) {
 		 *  necesitan. */
 		repositoryId: null,
 
-		/** { repositoryId }: configuración del plug-in que necesita el navegador ("" si no está configurado). */
+		/** { repositoryId, projectsApiUrl }: configuración del plug-in que necesita el navegador ("" si no está configurado). */
 		getSettings: function() {
 			return call("getSettings");
 		},
@@ -77,11 +77,6 @@ function(lang, Deferred, Request) {
 
 		deleteQuery: function(id) {
 			return call("deleteQuery", { id: id });
-		},
-
-		/** project: { name, description }. Lo crea en el servicio de proyectos; se resuelve con lo que devuelva ese servicio. */
-		createProject: function(project) {
-			return call("createProject", null, project);
 		}
 	};
 

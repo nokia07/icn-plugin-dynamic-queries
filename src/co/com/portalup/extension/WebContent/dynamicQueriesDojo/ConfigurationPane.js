@@ -23,7 +23,7 @@ define([
 		widgetsInTemplate: true,
 
 		// Debe coincidir con PluginConfiguration.DEFAULT_PROJECTS_API_URL, que el servidor usa mientras no se guarde otra.
-		defaultProjectsApiUrl: "http://localhost:8080/api/v1",
+		defaultProjectsApiUrl: "https://localhost:8443/api/v1",
 
 		load: function(callback) {
 			var values = {};
