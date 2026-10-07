@@ -8,7 +8,7 @@ class FakeSearchTemplate {
   constructor(args) { Object.assign(this, args); }
   _applyRetrievedSearchCriteria(icnSearch) { this.applied = icnSearch; }
 }
-global.define = (deps, f) => { mod = f({ map: (a, fn) => a.map(fn), filter: (a, fn) => a.filter(fn) }, FakeSearchTemplate); };
+global.define = (deps, f) => { mod = f({ map: (a, fn) => a.map(fn), filter: (a, fn) => a.filter(fn), forEach: (a, fn) => a.forEach(fn), indexOf: (a, v) => a.indexOf(v) }, FakeSearchTemplate); };
 require(path.join(__dirname, "../src/co/com/portalup/extension/WebContent/dynamicQueriesDojo/QuerySerializer.js"));
 const S = mod;
 const base = () => ({
@@ -102,4 +102,41 @@ assert.deepStrictEqual(S.build(back).definition.criteria, def.criteria);
 const tpl = S.toSearchTemplate(def, st.repository, "Pólizas");
 assert.ok(/^NewSearch_dq_/.test(tpl.id) && tpl.name === "Pólizas" && tpl.applied.criterias.length === 3);
 assert.throws(() => S.toIcnSearch(Object.assign({}, def, { criteria: [{ type: "condition", property: "X", dataType: "STRING", operator: "SOUNDS_LIKE", values: ["a"] }] }), st.repository), /no reconoce/);
-console.log("OK: 8 casos");
+
+// 9. toCeSql: columnas ({NAME} → DocumentTitle, Id siempre primero), subclases, grupos OR, literales, carpeta, versión, orden
+const sqlDef = {
+  documentClass: { symbolicName: "Poliza", includeSubclasses: false },
+  match: "ALL",
+  criteria: [
+    { type: "condition", property: "DocumentTitle", dataType: "STRING", operator: "STARTS_WITH", values: ["O'Brien"] },
+    { type: "group", match: "ANY", criteria: [
+      { type: "condition", property: "Aviso", dataType: "INTEGER", operator: "IN", values: [1, 2] },
+      { type: "condition", property: "ClienteVIP", dataType: "BOOLEAN", operator: "EQUAL", values: [true] }
+    ] },
+    { type: "condition", property: "DateCreated", dataType: "DATETIME", operator: "BETWEEN", values: ["2026-01-01T00:00:00.000-05:00", "2026-12-31T00:00:00.000-05:00"] },
+    { type: "condition", property: "Asunto", dataType: "STRING", operator: "IS_NULL", values: [] }
+  ],
+  scope: { folderPath: "/Carga CRM", includeSubfolders: true },
+  versionSelection: "releasedVersion",
+  resultsDisplay: { columns: ["{NAME}", "DateCreated"], sortBy: "DateCreated", sortAscending: false }
+};
+assert.strictEqual(S.toCeSql(sqlDef),
+  "SELECT d.[Id], d.[DocumentTitle], d.[DateCreated] FROM [Poliza] d WITH EXCLUDESUBCLASSES" +
+  " WHERE d.[DocumentTitle] LIKE 'O''Brien%' AND ((d.[Aviso] = 1 OR d.[Aviso] = 2) OR d.[ClienteVIP] = TRUE)" +
+  " AND (d.[DateCreated] >= 20260101T050000Z AND d.[DateCreated] <= 20261231T050000Z) AND d.[Asunto] IS NULL" +
+  " AND d.This INSUBFOLDER '/Carga CRM' AND d.[VersionStatus] = 1 ORDER BY d.[DateCreated] DESC");
+
+// 10. Coincidencia "cualquiera" en la raíz va entre paréntesis para no mezclarse con versión/carpeta; sin columnas → Id y nombre
+assert.strictEqual(S.toCeSql({
+  documentClass: { symbolicName: "Document", includeSubclasses: true }, match: "ANY", versionSelection: "allVersions",
+  criteria: [
+    { type: "condition", property: "A", dataType: "STRING", operator: "NOT_CONTAINS", values: ["x"] },
+    { type: "condition", property: "B", dataType: "FLOAT", operator: "NOT_BETWEEN", values: [1.5, 2] }
+  ]
+}), "SELECT d.[Id], d.[DocumentTitle] FROM [Document] d WITH INCLUDESUBCLASSES" +
+  " WHERE (NOT (d.[A] LIKE '%x%') OR NOT (d.[B] >= 1.5 AND d.[B] <= 2))");
+assert.throws(() => S.toCeSql(Object.assign({}, sqlDef, { criteria: [{ type: "condition", property: "D", dataType: "DATETIME", operator: "EQUAL", values: ["mañana"] }] })), /Fecha no válida/);
+
+// 11. La definición de prueba 7 también se convierte (la que produce el constructor)
+assert.ok(/^SELECT d\.\[Id\], d\.\[DocumentTitle\], d\.\[DateCreated\] FROM \[Document\] d WITH INCLUDESUBCLASSES WHERE /.test(S.toCeSql(def)));
+console.log("OK: 11 casos");

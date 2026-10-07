@@ -13,7 +13,7 @@ define([
 
 		/**
 		 * @name dynamicQueriesDojo.ConfigurationPane
-		 * @class Configuración del plug-in: repositorio de las consultas y conexión con el servicio de consultas.
+		 * @class Configuración del plug-in: repositorio de las consultas y URL del microservicio de DQ.
 		 *        La lee co.com.portalup.extension.PluginConfiguration en el servidor; los nombres deben coincidir.
 		 * @augments ecm.widget.admin.PluginConfigurationPane
 		 */
@@ -35,9 +35,6 @@ define([
 			// Sin disparar onChange (tercer argumento false): cargar no es un cambio, y _onParamChange reescribiría la
 			// configuración antes de que llegue la lista de repositorios.
 			this._loadRepositories(values.repositoryId || "");
-			this.apiUrlField.set("value", values.apiUrl || "", false);
-			this.apiTokenField.set("value", values.apiToken || "", false);
-			this.timeoutField.set("value", values.timeoutSeconds || "", false);
 			this.projectsApiUrlField.set("value",
 				"projectsApiUrl" in values ? values.projectsApiUrl || "" : this.defaultProjectsApiUrl, false);
 		},
@@ -67,9 +64,6 @@ define([
 			this.configurationString = JSON.stringify({
 				configuration: [
 					{ name: "repositoryId", value: this.repositoryIdField.get("value") },
-					{ name: "apiUrl", value: this.apiUrlField.get("value") },
-					{ name: "apiToken", value: this.apiTokenField.get("value") },
-					{ name: "timeoutSeconds", value: this.timeoutField.get("value") },
 					{ name: "projectsApiUrl", value: this.projectsApiUrlField.get("value") }
 				]
 			});
@@ -77,8 +71,7 @@ define([
 		},
 
 		validate: function() {
-			return !!this.repositoryIdField.get("value") && this.apiUrlField.isValid() && this.timeoutField.isValid() &&
-				this.projectsApiUrlField.isValid();
+			return !!this.repositoryIdField.get("value") && this.projectsApiUrlField.isValid();
 		}
 	});
 });

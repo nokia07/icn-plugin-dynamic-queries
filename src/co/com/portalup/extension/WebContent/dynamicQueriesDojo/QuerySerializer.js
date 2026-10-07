@@ -4,7 +4,8 @@ define([
 ],
 function(array, SearchTemplate) {
 
-	// Traducciones de ICN al vocabulario del contrato (docs/api/dynamic-queries.openapi.yaml).
+	// Traducciones de ICN al vocabulario de la definición de consulta (QueryDefinition en
+	// docs/api/dynamic-queries.openapi.yaml), que se guarda como config en el servicio de consultas.
 	// Valores de ICN verificados en 3.0.10; ver docs/icn-search-api.md.
 	var OPERATORS = {
 		EQUAL: "EQUAL",
@@ -156,8 +157,138 @@ function(array, SearchTemplate) {
 		};
 	}
 
+	// --- CE SQL (Content Engine de P8) ---
+
+	// Columna "{NAME}" de ICN: la propiedad de nombre de la clase. En las clases de documento es DocumentTitle.
+	var NAME_COLUMN = "{NAME}";
+	var NAME_PROPERTY = "DocumentTitle";
+
+	function sqlProperty(symbolicName) {
+		return "d.[" + (symbolicName === NAME_COLUMN ? NAME_PROPERTY : symbolicName) + "]";
+	}
+
+	function sqlString(text) {
+		return "'" + String(text).replace(/'/g, "''") + "'";
+	}
+
+	// "2026-03-15T00:00:00.000-05:00" → 20260315T050000Z (literal de fecha de CE SQL, en UTC y sin comillas).
+	function sqlDate(value) {
+		var date = new Date(value);
+		if (isNaN(date.getTime())) {
+			throw new Error("Fecha no válida: " + value);
+		}
+		return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+	}
+
+	function sqlLiteral(value, dataType) {
+		switch (dataType) {
+		case "INTEGER":
+		case "FLOAT":
+			if (typeof value !== "number" || !isFinite(value)) {
+				throw new Error("Número no válido: " + value);
+			}
+			return String(value);
+		case "BOOLEAN":
+			return value === true || value === "true" ? "TRUE" : "FALSE";
+		case "DATETIME":
+			return sqlDate(value);
+		case "GUID":
+			if (!/^\{?[0-9A-Fa-f-]{36}\}?$/.test(String(value))) {
+				throw new Error("Identificador no válido: " + value);
+			}
+			return String(value).charAt(0) === "{" ? String(value) : "{" + value + "}";
+		case "OBJECT":
+			return "OBJECT(" + sqlString(value) + ")";
+		default:
+			return sqlString(value);
+		}
+	}
+
+	function sqlCondition(node) {
+		var property = sqlProperty(node.property);
+		var values = node.values;
+		var literal = function(value) {
+			return sqlLiteral(value, node.dataType);
+		};
+		var like = function(pattern) {
+			return property + " LIKE " + sqlString(pattern);
+		};
+		var anyEqual = function() {
+			return "(" + array.map(values, function(value) { return property + " = " + literal(value); }).join(" OR ") + ")";
+		};
+		switch (node.operator) {
+		case "EQUAL": return property + " = " + literal(values[0]);
+		case "NOT_EQUAL": return property + " <> " + literal(values[0]);
+		case "LESS": return property + " < " + literal(values[0]);
+		case "LESS_OR_EQUAL": return property + " <= " + literal(values[0]);
+		case "GREATER": return property + " > " + literal(values[0]);
+		case "GREATER_OR_EQUAL": return property + " >= " + literal(values[0]);
+		case "STARTS_WITH": return like(values[0] + "%");
+		case "ENDS_WITH": return like("%" + values[0]);
+		case "CONTAINS": return like("%" + values[0] + "%");
+		case "NOT_CONTAINS": return "NOT (" + like("%" + values[0] + "%") + ")";
+		case "BETWEEN": return "(" + property + " >= " + literal(values[0]) + " AND " + property + " <= " + literal(values[1]) + ")";
+		case "NOT_BETWEEN": return "NOT (" + property + " >= " + literal(values[0]) + " AND " + property + " <= " + literal(values[1]) + ")";
+		// Para propiedades de un solo valor; las multivaluadas usarían "valor IN d.[Propiedad]".
+		case "IN": return anyEqual();
+		case "NOT_IN": return "NOT " + anyEqual();
+		case "IS_NULL": return property + " IS NULL";
+		case "IS_NOT_NULL": return property + " IS NOT NULL";
+		}
+		throw new Error("Operador no soportado en CE SQL: " + node.operator);
+	}
+
+	function sqlCriteria(nodes, match) {
+		var parts = array.map(nodes, function(node) {
+			return node.type === "group" ? "(" + sqlCriteria(node.criteria, node.match) + ")" : sqlCondition(node);
+		});
+		return parts.join(match === "ANY" ? " OR " : " AND ");
+	}
+
 	return {
 		SCHEMA_VERSION: "1.0",
+
+		/**
+		 * CE SQL equivalente a una definición del contrato: columnas de resultados (siempre con Id primero), clase con o
+		 * sin subclases, condiciones y grupos, carpeta, versión y orden. Lanza Error si un valor no se puede expresar
+		 * (fecha o número no válido, operador desconocido).
+		 */
+		toCeSql: function(definition) {
+			var columns = [ "Id" ];
+			array.forEach((definition.resultsDisplay && definition.resultsDisplay.columns) || [ NAME_COLUMN ], function(column) {
+				var property = column === NAME_COLUMN ? NAME_PROPERTY : column;
+				if (array.indexOf(columns, property) < 0) {
+					columns.push(property);
+				}
+			});
+			var sql = "SELECT " + array.map(columns, sqlProperty).join(", ") +
+				" FROM [" + definition.documentClass.symbolicName + "] d WITH " +
+				(definition.documentClass.includeSubclasses ? "INCLUDESUBCLASSES" : "EXCLUDESUBCLASSES");
+
+			var where = [];
+			if (definition.criteria && definition.criteria.length) {
+				where.push(definition.criteria.length > 1 && definition.match === "ANY" ?
+					"(" + sqlCriteria(definition.criteria, "ANY") + ")" : sqlCriteria(definition.criteria, definition.match));
+			}
+			if (definition.scope && definition.scope.folderPath) {
+				where.push("d.This " + (definition.scope.includeSubfolders ? "INSUBFOLDER " : "INFOLDER ") +
+					sqlString(definition.scope.folderPath));
+			}
+			if (definition.versionSelection === "releasedVersion") {
+				where.push("d.[VersionStatus] = 1");
+			} else if (definition.versionSelection === "currentVersion") {
+				where.push("d.[IsCurrentVersion] = TRUE");
+			}
+			if (where.length) {
+				sql += " WHERE " + where.join(" AND ");
+			}
+
+			var sortBy = definition.resultsDisplay && definition.resultsDisplay.sortBy;
+			if (sortBy) {
+				sql += " ORDER BY " + sqlProperty(sortBy) + (definition.resultsDisplay.sortAscending ? " ASC" : " DESC");
+			}
+			return sql;
+		},
 
 		/**
 		 * Arma la definición de consulta del contrato a partir del estado del constructor.

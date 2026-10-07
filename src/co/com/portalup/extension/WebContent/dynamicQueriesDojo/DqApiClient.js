@@ -5,9 +5,9 @@ define([
 function(Deferred, xhr) {
 
 	/**
-	 * Llama al microservicio de proyectos directamente desde el navegador (no pasa por el servidor de ICN), así que la
+	 * Llama al microservicio de DQ (proyectos y consultas) directamente desde el navegador (no pasa por el servidor de ICN), así que la
 	 * URL debe ser accesible desde el equipo del usuario y el servicio debe permitir CORS desde el origen de ICN.
-	 * Igual que QueryStoreClient, rechaza con { status, code, message }, donde message es apto para mostrar al usuario.
+	 * Igual que SettingsClient, rechaza con { status, code, message }, donde message es apto para mostrar al usuario.
 	 */
 	var client = {
 		/** URL base configurada en el plug-in (projectsApiUrl); la fija DQ tras getSettings. "" = no configurado. */
@@ -34,6 +34,32 @@ function(Deferred, xhr) {
 
 		deleteProject: function(id) {
 			return send("DELETE", "/project/" + encodeURIComponent(id));
+		},
+
+		/**
+		 * Consultas { id, name, cesql, config, status, ... }; status opcional: "ACTIVE" | "INACTIVE". config es la
+		 * definición de la consulta (QuerySerializer) como texto JSON.
+		 */
+		listQueries: function(status) {
+			return send("GET", "/query" + (status ? "?status=" + encodeURIComponent(status) : ""));
+		},
+
+		getQuery: function(id) {
+			return send("GET", "/query/" + encodeURIComponent(id));
+		},
+
+		/** query: { name, cesql, config, status? } (sin status queda ACTIVE). Se resuelve con la consulta creada. */
+		createQuery: function(query) {
+			return send("POST", "/query", query);
+		},
+
+		/** query: { name, cesql, config, status? } (sin status se conserva). Se resuelve con la consulta actualizada. */
+		updateQuery: function(id, query) {
+			return send("PUT", "/query/" + encodeURIComponent(id), query);
+		},
+
+		deleteQuery: function(id) {
+			return send("DELETE", "/query/" + encodeURIComponent(id));
 		}
 	};
 
@@ -42,7 +68,7 @@ function(Deferred, xhr) {
 		if (!client.baseUrl) {
 			deferred.reject({
 				code: "NOT_CONFIGURED",
-				message: "El servicio de proyectos no está configurado. Pida al administrador que configure su URL en el plug-in."
+				message: "El servicio de consultas y proyectos no está configurado. Pida al administrador que configure su URL en el plug-in."
 			});
 			return deferred.promise;
 		}
@@ -82,7 +108,7 @@ function(Deferred, xhr) {
 				deferred.reject({
 					status: 0,
 					code: "SERVICE_UNAVAILABLE",
-					message: "No se pudo comunicar con el servicio de proyectos (" + url + "). Verifique que esté en " +
+					message: "No se pudo comunicar con el servicio de consultas y proyectos (" + url + "). Verifique que esté en " +
 						"ejecución, que use https, que el navegador acepte su certificado y que permita solicitudes " +
 						"(CORS) desde ICN."
 				});
@@ -96,7 +122,7 @@ function(Deferred, xhr) {
 				// Cuerpo que no es JSON: se usa el mensaje genérico.
 			}
 			var message = data && typeof data.message === "string" ? data.message :
-				"El servicio de proyectos respondió con un error (HTTP " + status + ").";
+				"El servicio de consultas y proyectos respondió con un error (HTTP " + status + ").";
 			if (data && data.details instanceof Array && data.details.length) {
 				message += " " + data.details.join(" ");
 			}

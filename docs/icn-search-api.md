@@ -202,7 +202,8 @@ Correspondencia con el contrato (`docs/api/dynamic-queries.openapi.yaml`):
 - `Request.postPluginService(pluginId, serviceId, contentType, { requestBody, requestParams, … })`: envía `requestBody`
   crudo por POST con ese `Content-Type`; en Java se lee con `request.getReader()`.
 - Ambos agregan a los parámetros `plugin`, `action` (= id del servicio) y `desktop`, **sobrescribiendo** los que
-  uno envíe con esos nombres. Por eso `QueryStoreService` recibe la operación en `operation`.
+  uno envíe con esos nombres. Un servicio que necesite su propio parámetro de operación debe usar otro nombre
+  (p. ej. `operation`).
 - `requestCompleteCallback` recibe la respuesta JSON ya parseada.
 
 En Java, `PluginServiceCallbacks.getUserId()` da el usuario de ICN, pero lo resuelve con el parámetro `repositoryId` de

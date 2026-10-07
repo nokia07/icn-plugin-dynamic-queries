@@ -11,15 +11,12 @@ import com.ibm.json.java.JSONObject;
  */
 public final class PluginConfiguration {
 
-	/** URL base de la API de consultas; vacía = modo simulado en memoria. */
-	public static final String API_URL = "apiUrl";
-	/** Token de servicio (Bearer) para la API. */
-	public static final String API_TOKEN = "apiToken";
-	public static final String TIMEOUT_SECONDS = "timeoutSeconds";
 	/**
-	 * URL base del microservicio de proyectos (p. ej. http://servidor:8080/api/v1). Lo llama el navegador directamente
-	 * (ProjectServiceClient.js), así que debe ser accesible desde el equipo del usuario, permitir CORS desde ICN y ser
-	 * https: la Content-Security-Policy de ICN bloquea las URL http: que no sean el propio ICN.
+	 * URL base del microservicio de DQ, que atiende consultas ({url}/query) y proyectos ({url}/project), p. ej.
+	 * http://servidor:8080/api/v1. Lo llama el navegador directamente (DqApiClient.js), así que debe ser accesible desde
+	 * el equipo del usuario, permitir CORS desde ICN y ser https: la Content-Security-Policy de ICN bloquea las URL
+	 * http: que no sean el propio ICN. El nombre del parámetro se conserva por compatibilidad con configuraciones ya
+	 * guardadas.
 	 */
 	public static final String PROJECTS_API_URL = "projectsApiUrl";
 	/** URL de PROJECTS_API_URL mientras el administrador no la guarde (despliegue local). Debe coincidir con ConfigurationPane.js. */

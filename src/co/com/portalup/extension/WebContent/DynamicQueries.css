@@ -118,10 +118,25 @@
 	color: #da1e28;
 }
 
+.dqJsonDialog .dqJsonLabel {
+	margin: 0 0 4px;
+	font-weight: 600;
+}
+
+/* CE SQL: texto largo sin espacios útiles para cortar, se parte en cualquier punto */
+.dqJsonDialog .dqJson.dqCesql {
+	margin-bottom: 12px;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
 /* Diálogo "Guardar consulta" */
-.dqSaveQueryDialog .dqSaveNote {
-	margin: 0 0 12px;
-	color: #525252;
+.dqSaveQueryDialog .dqCesql {
+	width: 480px;
+	max-width: 70vw;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 12px;
+	background: #f4f4f4;
 }
 
 /* Diálogo "Proyectos": barra de acciones, formulario de alta/edición (oculto hasta Nuevo/Editar) y lista */

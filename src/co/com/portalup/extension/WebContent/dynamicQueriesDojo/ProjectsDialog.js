@@ -10,10 +10,10 @@ define([
 	"ecm/widget/ValidationTextBox",
 	"ecm/widget/dialog/BaseDialog",
 	"ecm/widget/dialog/ConfirmationDialog",
-	"dynamicQueriesDojo/ProjectServiceClient"
+	"dynamicQueriesDojo/DqApiClient"
 ],
 function(declare, lang, array, domClass, domConstruct, on, Button, Select, ValidationTextBox, BaseDialog,
-		ConfirmationDialog, ProjectServiceClient) {
+		ConfirmationDialog, DqApiClient) {
 
 	var STATUS_LABELS = { ACTIVE: "Activo", INACTIVE: "Inactivo" };
 
@@ -23,7 +23,7 @@ function(declare, lang, array, domClass, domConstruct, on, Button, Select, Valid
 	/**
 	 * @name dynamicQueriesDojo.ProjectsDialog
 	 * @class "Proyectos": lista los proyectos del servicio de proyectos (filtrables por estado) y permite crearlos,
-	 *        editarlos y eliminarlos. Llama al servicio desde el navegador con ProjectServiceClient.
+	 *        editarlos y eliminarlos. Llama al servicio desde el navegador con DqApiClient.
 	 * @augments ecm.widget.dialog.BaseDialog
 	 */
 	return declare("dynamicQueriesDojo.ProjectsDialog", [ BaseDialog ], {
@@ -145,7 +145,7 @@ function(declare, lang, array, domClass, domConstruct, on, Button, Select, Valid
 				selectId = this._selected ? this._selected.id : null;
 			}
 			this._setEmptyText("Cargando proyectos…");
-			ProjectServiceClient.listProjects(this._statusFilter.get("value")).then(lang.hitch(this, function(projects) {
+			DqApiClient.listProjects(this._statusFilter.get("value")).then(lang.hitch(this, function(projects) {
 				this._projects = projects instanceof Array ? projects : [];
 				this._renderRows();
 				this._select(array.filter(this._projects, function(project) { return project.id === selectId; })[0]);
@@ -241,7 +241,7 @@ function(declare, lang, array, domClass, domConstruct, on, Button, Select, Valid
 			var editing = this._editing;
 			this._saveButton.set("disabled", true);
 			this.setMessage("", "info");
-			(editing ? ProjectServiceClient.updateProject(editing.id, project) : ProjectServiceClient.createProject(project))
+			(editing ? DqApiClient.updateProject(editing.id, project) : DqApiClient.createProject(project))
 				.then(lang.hitch(this, function(saved) {
 					this._hideForm();
 					this.setMessage(editing ? "Proyecto actualizado." : "Proyecto creado.", "info");
@@ -267,7 +267,7 @@ function(declare, lang, array, domClass, domConstruct, on, Button, Select, Valid
 				buttonLabel: "Eliminar",
 				cancelButtonDefault: true,
 				onExecute: lang.hitch(this, function() {
-					ProjectServiceClient.deleteProject(project.id).then(lang.hitch(this, function() {
+					DqApiClient.deleteProject(project.id).then(lang.hitch(this, function() {
 						if (this._editing && this._editing.id === project.id) {
 							this._hideForm();
 						}

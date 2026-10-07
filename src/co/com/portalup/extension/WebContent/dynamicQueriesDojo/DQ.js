@@ -16,9 +16,9 @@ define([
 	"ecm/widget/dialog/MessageDialog",
 	"ecm/widget/layout/_LaunchBarPane",
 	"dynamicQueriesDojo/ProjectsDialog",
-	"dynamicQueriesDojo/ProjectServiceClient",
+	"dynamicQueriesDojo/DqApiClient",
 	"dynamicQueriesDojo/QuerySerializer",
-	"dynamicQueriesDojo/QueryStoreClient",
+	"dynamicQueriesDojo/SettingsClient",
 	"dynamicQueriesDojo/QueryTab",
 	"dojo/text!./templates/DQ.html",
 	"idx/layout/BorderContainer",
@@ -44,13 +44,11 @@ function(declare,
 		MessageDialog,
 		_LaunchBarPane,
 		ProjectsDialog,
-		ProjectServiceClient,
+		DqApiClient,
 		QuerySerializer,
-		QueryStoreClient,
+		SettingsClient,
 		QueryTab,
 		template) {
-
-	var MAX_TREE_QUERIES = 500;
 
 	// Carpeta única del árbol; se llena con las consultas que devuelve el servicio de consultas.
 	var ROOT_ITEMS = [
@@ -132,25 +130,33 @@ function(declare,
 		},
 
 		/**
-		 * Recarga "Consultas guardadas" con las consultas que devuelve el servicio de consultas.
+		 * Recarga "Consultas guardadas" con las consultas que devuelve el servicio de consultas, ordenadas por nombre.
 		 */
 		refreshTree: function() {
-			return QueryStoreClient.listQueries({ sort: "name", limit: MAX_TREE_QUERIES }).then(lang.hitch(this, function(page) {
-				this.setTreeItems(array.map(page.items, function(query) {
-					return { id: "q:" + query.id, name: query.name, type: "query", parent: "saved", queryId: query.id };
+			return DqApiClient.listQueries().then(lang.hitch(this, function(queries) {
+				queries = (queries instanceof Array ? queries : []).slice().sort(function(a, b) {
+					return String(a.name).localeCompare(String(b.name), undefined, { sensitivity: "base" });
+				});
+				this.setTreeItems(array.map(queries, function(query) {
+					return {
+						id: "q:" + query.id,
+						name: query.status === "INACTIVE" ? query.name + " (inactiva)" : query.name,
+						type: "query",
+						parent: "saved",
+						queryId: query.id
+					};
 				}));
-				this.treeMessageNode.textContent = page.total > page.items.length ?
-					"Se muestran las primeras " + page.items.length + " de " + page.total + " consultas." : "";
+				this.treeMessageNode.textContent = "";
 			}), lang.hitch(this, function(error) {
 				this.treeMessageNode.textContent = "No se pudieron cargar las consultas: " + error.message;
 			}));
 		},
 
-		// El repositorio es el configurado en el plug-in (repositoryId); debe estar en el escritorio. Las demás
-		// llamadas al servicio lo necesitan, por eso el árbol se carga después.
+		// El repositorio es el configurado en el plug-in (repositoryId); debe estar en el escritorio. La misma
+		// configuración trae la URL del microservicio, por eso el árbol se carga después.
 		_loadRepository: function() {
-			QueryStoreClient.getSettings().then(lang.hitch(this, function(settings) {
-				ProjectServiceClient.baseUrl = settings.projectsApiUrl || "";
+			SettingsClient.getSettings().then(lang.hitch(this, function(settings) {
+				DqApiClient.baseUrl = settings.projectsApiUrl || "";
 				if (!settings.repositoryId) {
 					this._showRepositoryProblem("El administrador no ha configurado el repositorio de las consultas.");
 					return;
@@ -162,7 +168,6 @@ function(declare,
 					return;
 				}
 				this.repository = repository;
-				QueryStoreClient.repositoryId = repository.id;
 				this.repositoryNameNode.textContent = repository.name;
 				this.newQueryButton.set("disabled", false);
 				this.refreshTree();
@@ -189,16 +194,29 @@ function(declare,
 				}
 				return;
 			}
-			QueryStoreClient.getQuery(queryId).then(lang.hitch(this, function(query) {
-				var repository = Desktop.getRepository(query.definition.repository.id);
+			DqApiClient.getQuery(queryId).then(lang.hitch(this, function(query) {
+				// config es la definición que guarda SaveQueryDialog; una consulta creada por fuera del plug-in puede no
+				// traerla.
+				var definition;
+				try {
+					definition = JSON.parse(query.config);
+				} catch (e) {
+					definition = null;
+				}
+				if (!definition || !definition.repository || !definition.documentClass) {
+					this._showError("La consulta \u201c" + query.name + "\u201d no tiene una definición que el " +
+						"constructor pueda abrir (se guardó por fuera de este plug-in).");
+					return;
+				}
+				var repository = Desktop.getRepository(definition.repository.id);
 				if (!repository) {
-					this._showError("El repositorio \u201c" + query.definition.repository.id +
+					this._showError("El repositorio \u201c" + definition.repository.id +
 						"\u201d de la consulta no está disponible en este escritorio.");
 					return;
 				}
 				var searchTemplate;
 				try {
-					searchTemplate = QuerySerializer.toSearchTemplate(query.definition, repository, query.name);
+					searchTemplate = QuerySerializer.toSearchTemplate(definition, repository, query.name);
 				} catch (e) {
 					this._showError(e.message);
 					return;
@@ -291,7 +309,7 @@ function(declare,
 				buttonLabel: "Eliminar",
 				cancelButtonDefault: true,
 				onExecute: lang.hitch(this, function() {
-					QueryStoreClient.deleteQuery(item.queryId).then(lang.hitch(this, function() {
+					DqApiClient.deleteQuery(item.queryId).then(lang.hitch(this, function() {
 						var openTab = this._findQueryTab(item.queryId);
 						if (openTab) {
 							this.tabContainer.closeChild(openTab);

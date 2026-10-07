@@ -93,7 +93,8 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 	return declare("dynamicQueriesDojo.QueryTab", [ SearchBuilder ], {
 		/** @lends dynamicQueriesDojo.QueryTab.prototype */
 
-		// Consulta guardada que muestra la pestaña ({ id, version, name, description }); null si es nueva.
+		// Consulta guardada que muestra la pestaña ({ id, name, status, cesql, config, ... } del servicio); null si es
+		// nueva.
 		savedQuery: null,
 
 		// Visualización de resultados guardada ({ columns, sortBy, sortAsc }): el constructor la reemplaza por la
@@ -221,6 +222,17 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 				array.forEach(result.errors, function(error) {
 					domConstruct.create("li", { textContent: error }, list);
 				});
+			}
+			if (!result.errors.length) {
+				var cesql;
+				try {
+					cesql = QuerySerializer.toCeSql(result.definition);
+				} catch (e) {
+					cesql = "No se pudo generar el CE SQL: " + e.message;
+				}
+				domConstruct.create("p", { "class": "dqJsonLabel", textContent: "CE SQL:" }, content);
+				domConstruct.create("pre", { "class": "dqJson dqCesql", textContent: cesql }, content);
+				domConstruct.create("p", { "class": "dqJsonLabel", textContent: "Definición (config):" }, content);
 			}
 			domConstruct.create("pre", { "class": "dqJson", textContent: JSON.stringify(result.definition, null, 2) }, content);
 
