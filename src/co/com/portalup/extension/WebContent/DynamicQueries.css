@@ -85,6 +85,23 @@
 	margin-bottom: 8px;
 }
 
+/* Sin permiso (SettingsService.canDesign = false): solo el aviso, sin diseñador ni consultas */
+.dqPane .dqNoAccess,
+.dqPane.dqAccessDenied .dqMainContainer {
+	display: none;
+}
+
+.dqPane.dqAccessDenied .dqNoAccess {
+	display: block;
+}
+
+/* Panel de configuración del plug-in (admin de ICN) */
+.dqConfigHint {
+	margin-top: 4px;
+	color: #525252;
+	font-size: 12px;
+}
+
 /* Partes del constructor de ICN que DQ no usa (guardar en P8, "Buscar en", "Opciones de búsqueda"); !important porque
    ICN vuelve a mostrar algunas al restablecer */
 .dqPane .dqHiddenAction {

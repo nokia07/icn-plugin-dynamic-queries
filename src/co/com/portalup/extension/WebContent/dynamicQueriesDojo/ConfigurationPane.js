@@ -13,7 +13,8 @@ define([
 
 		/**
 		 * @name dynamicQueriesDojo.ConfigurationPane
-		 * @class Configuración del plug-in: repositorio de las consultas y URL del microservicio de DQ.
+		 * @class Configuración del plug-in: repositorio de las consultas, URL del microservicio de DQ y grupos con acceso
+		 *        al diseñador.
 		 *        La lee co.com.portalup.extension.PluginConfiguration en el servidor; los nombres deben coincidir.
 		 * @augments ecm.widget.admin.PluginConfigurationPane
 		 */
@@ -37,6 +38,7 @@ define([
 			this._loadRepositories(values.repositoryId || "");
 			this.projectsApiUrlField.set("value",
 				"projectsApiUrl" in values ? values.projectsApiUrl || "" : this.defaultProjectsApiUrl, false);
+			this.designerGroupsField.set("value", values.designerGroups || "", false);
 		},
 
 		// Repositorios P8 configurados en ICN (no solo los de un escritorio): el plug-in es global.
@@ -64,7 +66,8 @@ define([
 			this.configurationString = JSON.stringify({
 				configuration: [
 					{ name: "repositoryId", value: this.repositoryIdField.get("value") },
-					{ name: "projectsApiUrl", value: this.projectsApiUrlField.get("value") }
+					{ name: "projectsApiUrl", value: this.projectsApiUrlField.get("value") },
+					{ name: "designerGroups", value: this.designerGroupsField.get("value") }
 				]
 			});
 			this.onSaveNeeded(true);

@@ -88,6 +88,14 @@ function(declare,
 			this.inherited(arguments);
 
 			this.own(aspect.after(this.tabContainer, "removeChild", lang.hitch(this, this._updateCenterView)));
+			// ICN no recrea los paneles al cerrar sesión: si entra otro usuario en la misma pestaña vería las consultas y
+			// el permiso del anterior. Se vacía al salir y se vuelve a cargar (y a comprobar el permiso) al entrar.
+			this.own(aspect.after(Desktop, "onLogout", lang.hitch(this, this._clearSession)));
+			this.own(aspect.after(Desktop, "onLogin", lang.hitch(this, function() {
+				if (!this.isLoaded && this.selected) {
+					this.loadContent();
+				}
+			})));
 			this._createTreeMenu();
 			this.setTreeItems([]);
 
@@ -174,14 +182,24 @@ function(declare,
 		},
 
 		// El repositorio es el configurado en el plug-in (repositoryId); debe estar en el escritorio. La misma
-		// configuración trae la URL del microservicio, por eso el árbol se carga después.
+		// configuración trae la URL del microservicio y si el usuario puede usar el diseñador (canDesign, según sus
+		// grupos de P8), por eso el árbol se carga después. Ocultarlo no protege el microservicio, que el navegador
+		// llama directamente.
 		_loadRepository: function() {
+			var session = this._session = (this._session || 0) + 1;
 			SettingsClient.getSettings().then(lang.hitch(this, function(settings) {
-				DqApiClient.baseUrl = settings.projectsApiUrl || "";
+				if (session !== this._session) {
+					return; // Se cerró la sesión mientras llegaba la respuesta.
+				}
 				if (!settings.repositoryId) {
 					this._showRepositoryProblem("El administrador no ha configurado el repositorio de las consultas.");
 					return;
 				}
+				if (!settings.canDesign) {
+					domClass.add(this.domNode, "dqAccessDenied");
+					return;
+				}
+				DqApiClient.baseUrl = settings.projectsApiUrl || "";
 				var repository = Desktop.getRepository(settings.repositoryId);
 				if (!repository) {
 					this._showRepositoryProblem("El repositorio \u201c" + settings.repositoryId +
@@ -191,10 +209,32 @@ function(declare,
 				this.repository = repository;
 				this.repositoryNameNode.textContent = repository.name;
 				this.newQueryButton.set("disabled", false);
+				this.projectsButton.set("disabled", false);
 				this.refreshTree();
 			}), lang.hitch(this, function(error) {
-				this._showRepositoryProblem("No se pudo leer la configuración del plug-in: " + error.message);
+				if (session === this._session) {
+					this._showRepositoryProblem("No se pudo leer la configuración del plug-in: " + error.message);
+				}
 			}));
+		},
+
+		// Deja el panel como recién creado: sin pestañas, árbol, repositorio ni permiso; loadContent lo vuelve a cargar.
+		_clearSession: function() {
+			this._session = (this._session || 0) + 1;
+			array.forEach(this.tabContainer.getChildren(), function(tab) {
+				this.tabContainer.removeChild(tab);
+				tab.destroyRecursive();
+			}, this);
+			this._newQueryCount = 0;
+			this.setTreeItems([]);
+			this.treeMessageNode.textContent = "";
+			this.repository = null;
+			this.repositoryNameNode.textContent = "";
+			domClass.remove(this.repositoryNameNode, "dqRepositoryError");
+			this.newQueryButton.set("disabled", true);
+			this.projectsButton.set("disabled", true);
+			domClass.remove(this.domNode, "dqAccessDenied");
+			this.isLoaded = false;
 		},
 
 		_showRepositoryProblem: function(message) {

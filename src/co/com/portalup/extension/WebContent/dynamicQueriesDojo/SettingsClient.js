@@ -10,7 +10,7 @@ function(Deferred, Request) {
 
 	return {
 		/**
-		 * Configuración del plug-in que necesita el navegador: { repositoryId, projectsApiUrl } ("" si no está
+		 * Configuración del plug-in que necesita el navegador: { repositoryId, projectsApiUrl, canDesign } ("" si no está
 		 * configurado). Se rechaza con { code, message }, donde message es apto para mostrar al usuario.
 		 */
 		getSettings: function() {

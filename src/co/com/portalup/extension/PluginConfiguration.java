@@ -1,6 +1,8 @@
 package co.com.portalup.extension;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.ibm.json.java.JSONArray;
 import com.ibm.json.java.JSONObject;
@@ -23,6 +25,11 @@ public final class PluginConfiguration {
 	public static final String DEFAULT_PROJECTS_API_URL = "https://localhost:8443/api/v1";
 	/** Id (en ICN) del único repositorio sobre el que se diseñan y ejecutan las consultas. */
 	public static final String REPOSITORY_ID = "repositoryId";
+	/**
+	 * Grupos de P8 (separados por punto y coma o saltos de línea: los DN llevan comas) cuyos miembros pueden usar el diseñador de consultas; vacío =
+	 * todos los usuarios. Se comparan sin distinguir mayúsculas con el nombre corto, el nombre y el DN de los grupos.
+	 */
+	public static final String DESIGNER_GROUPS = "designerGroups";
 
 	private PluginConfiguration() {
 	}
@@ -50,6 +57,17 @@ public final class PluginConfiguration {
 	/** PROJECTS_API_URL, o la predeterminada si la configuración nunca la guardó; "" si el administrador la dejó vacía. */
 	public static String getProjectsApiUrl(JSONObject config) {
 		return config.containsKey(PROJECTS_API_URL) ? get(config, PROJECTS_API_URL) : DEFAULT_PROJECTS_API_URL;
+	}
+
+	/** DESIGNER_GROUPS como lista, sin vacíos; vacía si no hay restricción. */
+	public static List<String> getDesignerGroups(JSONObject config) {
+		List<String> groups = new ArrayList<String>();
+		for (String group : get(config, DESIGNER_GROUPS).split("[;\\r\\n]+")) {
+			if (group.trim().length() > 0) {
+				groups.add(group.trim());
+			}
+		}
+		return groups;
 	}
 
 	/** Valor sin espacios, o "" si no está configurado. */

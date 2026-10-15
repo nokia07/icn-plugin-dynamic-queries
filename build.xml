@@ -7,6 +7,7 @@
 	<path id="classpath">
 		<pathelement location="./lib/navigatorAPI.jar" />
 		<pathelement location="./lib/j2ee.jar" />
+		<pathelement location="./lib/Jace.jar" />
 		<pathelement location="./temp" />
 	</path>
 
