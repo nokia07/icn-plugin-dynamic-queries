@@ -60,6 +60,42 @@ function(Deferred, xhr) {
 
 		deleteQuery: function(id) {
 			return send("DELETE", "/query/" + encodeURIComponent(id));
+		},
+
+		/**
+		 * Asociaciones proyecto-consulta { id, projectId, queryId, config, status, createdAt }. filters (opcionales y
+		 * combinables): { projectId, queryId, status }.
+		 */
+		listProjectQueries: function(filters) {
+			var params = [];
+			for (var name in filters || {}) {
+				if (filters[name] !== null && filters[name] !== undefined && filters[name] !== "") {
+					params.push(encodeURIComponent(name) + "=" + encodeURIComponent(filters[name]));
+				}
+			}
+			return send("GET", "/project-query" + (params.length ? "?" + params.join("&") : ""));
+		},
+
+		/**
+		 * Proyectos con sus consultas asociadas: [ { id, name, description, status, createdAt, queries: [ { id, name,
+		 * cesql, config, status, createdAt, projectQueryId, projectQueryConfig, projectQueryStatus } ] } ]. Las
+		 * consultas sin proyecto no aparecen.
+		 */
+		listProjectQueryCompose: function() {
+			return send("GET", "/project-query-compose");
+		},
+
+		/** association: { projectId, queryId, config?, status? }. 409 si la pareja ya existe. */
+		createProjectQuery: function(association) {
+			return send("POST", "/project-query", association);
+		},
+
+		updateProjectQuery: function(id, association) {
+			return send("PUT", "/project-query/" + encodeURIComponent(id), association);
+		},
+
+		deleteProjectQuery: function(id) {
+			return send("DELETE", "/project-query/" + encodeURIComponent(id));
 		}
 	};
 

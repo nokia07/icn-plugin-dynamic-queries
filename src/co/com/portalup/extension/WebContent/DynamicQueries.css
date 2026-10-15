@@ -237,3 +237,7 @@
 	gap: 4px;
 	justify-content: flex-end;
 }
+
+.dqSaveQueryDialog .dqProjectSelect {
+	min-width: 240px;
+}

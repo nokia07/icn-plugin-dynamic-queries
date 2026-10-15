@@ -5,6 +5,7 @@ define([
 	"dojo/aspect",
 	"dojo/dom-class",
 	"dojo/dom-construct",
+	"dojo/promise/all",
 	"dojo/store/Memory",
 	"dijit/registry",
 	"dijit/Menu",
@@ -33,6 +34,7 @@ function(declare,
 		aspect,
 		domClass,
 		domConstruct,
+		all,
 		Memory,
 		registry,
 		Menu,
@@ -50,11 +52,17 @@ function(declare,
 		QueryTab,
 		template) {
 
-	// Carpeta única del árbol; se llena con las consultas que devuelve el servicio de consultas.
+	// Raíz del árbol; "Consultas guardadas" se llena con una carpeta por proyecto y sus consultas.
 	var ROOT_ITEMS = [
 		{ id: "root", name: "Consultas", type: "root" },
 		{ id: "saved", name: "Consultas guardadas", type: "folder", parent: "root" }
 	];
+
+	function sortByName(list) {
+		return (list instanceof Array ? list : []).slice().sort(function(a, b) {
+			return String(a.name).localeCompare(String(b.name), undefined, { sensitivity: "base" });
+		});
+	}
 
 	/**
 	 * @name dynamicQueriesDojo.DQ
@@ -130,23 +138,36 @@ function(declare,
 		},
 
 		/**
-		 * Recarga "Consultas guardadas" con las consultas que devuelve el servicio de consultas, ordenadas por nombre.
+		 * Recarga "Consultas guardadas": una carpeta por proyecto con sus consultas (/project-query-compose), ambos
+		 * ordenados por nombre. Una misma consulta puede estar en varios proyectos; las consultas sin proyecto no
+		 * aparecen.
 		 */
 		refreshTree: function() {
-			return DqApiClient.listQueries().then(lang.hitch(this, function(queries) {
-				queries = (queries instanceof Array ? queries : []).slice().sort(function(a, b) {
-					return String(a.name).localeCompare(String(b.name), undefined, { sensitivity: "base" });
-				});
-				this.setTreeItems(array.map(queries, function(query) {
-					return {
-						id: "q:" + query.id,
-						name: query.status === "INACTIVE" ? query.name + " (inactiva)" : query.name,
-						type: "query",
+			return DqApiClient.listProjectQueryCompose().then(lang.hitch(this, function(projects) {
+				var items = [];
+				array.forEach(sortByName(projects), function(project) {
+					var projectItemId = "p:" + project.id;
+					items.push({
+						id: projectItemId,
+						name: project.status === "INACTIVE" ? project.name + " (inactivo)" : project.name,
+						type: "project",
 						parent: "saved",
-						queryId: query.id
-					};
-				}));
-				this.treeMessageNode.textContent = "";
+						projectId: project.id
+					});
+					array.forEach(sortByName(project.queries), function(query) {
+						var inactive = query.status === "INACTIVE" || query.projectQueryStatus === "INACTIVE";
+						items.push({
+							// Por asociación y no por consulta: la misma consulta puede colgar de varios proyectos.
+							id: "pq:" + query.projectQueryId,
+							name: inactive ? query.name + " (inactiva)" : query.name,
+							type: "query",
+							parent: projectItemId,
+							queryId: query.id
+						});
+					});
+				});
+				this.setTreeItems(items);
+				this.treeMessageNode.textContent = items.length ? "" : "No hay proyectos registrados.";
 			}), lang.hitch(this, function(error) {
 				this.treeMessageNode.textContent = "No se pudieron cargar las consultas: " + error.message;
 			}));
@@ -232,7 +253,8 @@ function(declare,
 		},
 
 		/**
-		 * Reemplaza las consultas del árbol. Cada item es { id, name, type: "query", parent: "saved", queryId }.
+		 * Reemplaza el contenido de "Consultas guardadas". Items: proyectos { id, name, type: "project", parent: "saved",
+		 * projectId } y consultas { id, name, type: "query", parent: id del proyecto, queryId }.
 		 */
 		setTreeItems: function(items) {
 			this._renderTree(ROOT_ITEMS.concat(items || []));
@@ -291,9 +313,11 @@ function(declare,
 
 		_onProjectsClick: function() {
 			var dialog = new ProjectsDialog();
-			dialog.own(dialog.on("hide", function() {
+			dialog.own(dialog.on("hide", lang.hitch(this, function() {
 				dialog.destroyRecursive();
-			}));
+				// Los proyectos son las carpetas del árbol: pueden haber cambiado.
+				this.refreshTree();
+			})));
 			dialog.show();
 		},
 
@@ -305,11 +329,19 @@ function(declare,
 
 		_deleteSavedQuery: function(item) {
 			var dialog = new ConfirmationDialog({
-				text: "¿Eliminar la consulta \u201c" + item.name + "\u201d? Esta acción no se puede deshacer.",
+				text: "¿Eliminar la consulta \u201c" + item.name + "\u201d y su asociación al proyecto? Esta acción no " +
+					"se puede deshacer.",
 				buttonLabel: "Eliminar",
 				cancelButtonDefault: true,
 				onExecute: lang.hitch(this, function() {
-					DqApiClient.deleteQuery(item.queryId).then(lang.hitch(this, function() {
+					// El servicio no deja eliminar una consulta asociada a proyectos: primero se quitan sus asociaciones.
+					DqApiClient.listProjectQueries({ queryId: item.queryId }).then(function(associations) {
+						return all(array.map(associations instanceof Array ? associations : [], function(association) {
+							return DqApiClient.deleteProjectQuery(association.id);
+						}));
+					}).then(function() {
+						return DqApiClient.deleteQuery(item.queryId);
+					}).then(lang.hitch(this, function() {
 						var openTab = this._findQueryTab(item.queryId);
 						if (openTab) {
 							this.tabContainer.closeChild(openTab);
