@@ -347,7 +347,7 @@ public class DynamicQueries extends Plugin {
 	     */
 	    public PluginFeature[] getFeatures() {
 	    	if (pluginFeatures.length == 0) {
-				pluginFeatures = new PluginFeature[] {new co.com.portalup.extension.DQ()};
+				pluginFeatures = new PluginFeature[] {new co.com.portalup.extension.DQ(), new co.com.portalup.extension.DQResults()};
 			}
 			return pluginFeatures;
 	    }
