@@ -1,0 +1,54 @@
+<div class="ecmCenterPane dqPane">
+	<div data-dojo-type="idx/layout/BorderContainer"
+		data-dojo-attach-point="mainContainer"
+		data-dojo-props="gutters:false, liveSplitters:true"
+		class="dqMainContainer">
+
+		<!-- Panel izquierdo: repositorio configurado, nueva consulta, proyectos y consultas guardadas -->
+		<div data-dojo-type="dijit/layout/ContentPane"
+			data-dojo-attach-point="navPane"
+			data-dojo-props="region:'leading', splitter:true"
+			class="dqNavPane">
+			<div class="dqRepository" data-dojo-attach-point="repositoryNameNode" title="Repositorio de las consultas"></div>
+			<div class="dqNewQueryRow">
+				<button type="button" data-dojo-type="dijit/form/Button"
+					data-dojo-attach-point="newQueryButton"
+					data-dojo-attach-event="onClick: _onNewQueryClick"
+					data-dojo-props="disabled:true"
+					class="dqNewQueryButton">Nueva consulta</button>
+				<button type="button" data-dojo-type="dijit/form/Button"
+					data-dojo-attach-point="projectsButton"
+					data-dojo-attach-event="onClick: _onProjectsClick"
+					data-dojo-props="disabled:true"
+					class="dqProjectsButton">Proyectos</button>
+			</div>
+			<div data-dojo-attach-point="treeNode" class="dqTree"></div>
+			<div data-dojo-attach-point="treeMessageNode" class="dqTreeMessage" role="status"></div>
+		</div>
+
+		<!-- Área central: estado vacío o pestañas de consultas -->
+		<div data-dojo-type="dijit/layout/StackContainer"
+			data-dojo-attach-point="centerStack"
+			data-dojo-props="region:'center'"
+			class="dqCenter">
+			<div data-dojo-type="dijit/layout/ContentPane"
+				data-dojo-attach-point="emptyPane"
+				class="dqEmptyPane">
+				<div class="dqEmptyState">
+					<h2 class="dqEmptyTitle">Consultas dinámicas</h2>
+					<p>Seleccione una consulta del árbol o cree una con <strong>Nueva consulta</strong>.</p>
+				</div>
+			</div>
+			<div data-dojo-type="dijit/layout/TabContainer"
+				data-dojo-attach-point="tabContainer"
+				data-dojo-props="useMenu:false, useSlider:true"
+				class="dqTabs"></div>
+		</div>
+	</div>
+
+	<!-- En lugar del diseñador cuando el usuario no pertenece a los grupos configurados -->
+	<div class="dqNoAccess dqEmptyState" role="alert">
+		<h2 class="dqEmptyTitle">Consultas dinámicas</h2>
+		<p>No tiene permiso para usar el diseñador de consultas. Solicite acceso al administrador.</p>
+	</div>
+</div>

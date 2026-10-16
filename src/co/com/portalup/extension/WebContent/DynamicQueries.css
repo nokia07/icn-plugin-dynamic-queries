@@ -1,0 +1,459 @@
+.DynamicQueriesICNLaunchIcon {
+	width: 32px;
+	height: 32px;
+	background: url('images/creative-design.png') no-repeat;
+}
+
+/* ==== Feature DQ: todos los estilos van bajo .dqPane para no afectar el resto de ICN ==== */
+
+.dqPane .dqMainContainer {
+	width: 100%;
+	height: 100%;
+}
+
+/* Panel izquierdo */
+.dqPane .dqNavPane {
+	width: 280px;
+	padding: 16px 12px;
+	box-sizing: border-box;
+	border-right: 1px solid #e0e0e0;
+}
+
+/* Repositorio configurado: solo lectura, con el aspecto del selector de ICN */
+.dqPane .dqRepository {
+	margin-bottom: 12px;
+	padding: 11px 16px;
+	background: #f4f4f4;
+	border-bottom: 1px solid #8d8d8d;
+	color: #161616;
+	font-size: 14px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dqPane .dqRepository.dqRepositoryError {
+	color: #da1e28;
+	white-space: normal;
+}
+
+.dqPane .dqNewQueryRow {
+	margin: 4px 0 12px;
+}
+
+/* "Nueva consulta" y "Proyectos" ocupan el ancho del panel, como el recuadro del repositorio */
+.dqPane .dqNewQueryButton,
+.dqPane .dqNewQueryButton .dijitButtonNode,
+.dqPane .dqProjectsButton,
+.dqPane .dqProjectsButton .dijitButtonNode {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.dqPane .dqProjectsButton {
+	margin-top: 6px;
+}
+
+.dqPane .dqTree .dijitTreeRow {
+	padding: 4px 0;
+}
+
+.dqPane .dqTreeMessage {
+	margin-top: 8px;
+	color: #525252;
+	font-size: 12px;
+}
+
+.dqPane .dqQueryIcon {
+	width: 16px;
+	height: 16px;
+	background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5' fill='none' stroke='%23525252' stroke-width='1.5'/%3E%3Cpath d='M10 10l4.5 4.5' stroke='%23525252' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat center;
+}
+
+/* Área central */
+.dqPane .dqEmptyState {
+	max-width: 480px;
+	margin: 80px auto 0;
+	text-align: center;
+	color: #525252;
+}
+
+.dqPane .dqEmptyTitle {
+	font-size: 20px;
+	font-weight: normal;
+	color: #161616;
+	margin-bottom: 8px;
+}
+
+/* Sin permiso (SettingsService.canDesign = false): solo el aviso, sin diseñador ni consultas */
+.dqPane .dqNoAccess,
+.dqPane.dqAccessDenied .dqMainContainer {
+	display: none;
+}
+
+.dqPane.dqAccessDenied .dqNoAccess {
+	display: block;
+}
+
+/* Panel de configuración del plug-in (admin de ICN) */
+.dqConfigHint {
+	margin-top: 4px;
+	color: #525252;
+	font-size: 12px;
+}
+
+/* Partes del constructor de ICN que DQ no usa (guardar en P8, "Buscar en", "Opciones de búsqueda"); !important porque
+   ICN vuelve a mostrar algunas al restablecer */
+.dqPane .dqHiddenAction {
+	display: none !important;
+}
+
+/* Diálogo "Ver JSON": los diálogos se insertan fuera de .dqPane, por eso usan su propia clase */
+.dqJsonDialog .dqJsonContent {
+	width: 640px;
+	max-width: 80vw;
+}
+
+.dqJsonDialog .dqJson {
+	max-height: 45vh;
+	overflow: auto;
+	margin: 0;
+	padding: 12px;
+	background: #f4f4f4;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 12px;
+	white-space: pre;
+}
+
+.dqJsonDialog .dqJsonErrorsTitle {
+	margin: 0 0 4px;
+	color: #da1e28;
+}
+
+.dqJsonDialog .dqJsonErrors {
+	margin: 0 0 12px;
+	color: #da1e28;
+}
+
+.dqJsonDialog .dqJsonLabel {
+	margin: 0 0 4px;
+	font-weight: 600;
+}
+
+/* CE SQL: texto largo sin espacios útiles para cortar, se parte en cualquier punto */
+.dqJsonDialog .dqJson.dqCesql {
+	margin-bottom: 12px;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+/* Diálogo "Guardar consulta" */
+.dqSaveQueryDialog .dqCesql {
+	width: 480px;
+	max-width: 70vw;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 12px;
+	background: #f4f4f4;
+}
+
+/* Diálogo "Proyectos": barra de acciones, formulario de alta/edición (oculto hasta Nuevo/Editar) y lista */
+.dqProjectsDialog .dqProjectsContent {
+	width: 860px;
+	max-width: 85vw;
+}
+
+.dqProjectsDialog .dqProjectsToolbar {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-bottom: 8px;
+}
+
+.dqProjectsDialog .dqProjectsFilter {
+	margin-left: auto;
+}
+
+.dqProjectsDialog .dqProjectsFilter label {
+	margin-right: 6px;
+}
+
+.dqProjectsDialog .dqProjectsGrid {
+	height: 280px;
+	overflow: auto;
+	border: 1px solid #c6c6c6;
+	background: #fff;
+}
+
+.dqProjectsDialog .dqProjectsGrid table {
+	width: 100%;
+	border-collapse: collapse;
+	table-layout: fixed;
+}
+
+.dqProjectsDialog .dqProjectsGrid th {
+	position: sticky;
+	top: 0;
+	padding: 6px 8px;
+	background: #e0e0e0;
+	text-align: left;
+	font-weight: 600;
+}
+
+.dqProjectsDialog .dqProjectsGrid th:nth-child(1) {
+	width: 50px;
+}
+
+.dqProjectsDialog .dqProjectsGrid th:nth-child(2) {
+	width: 25%;
+}
+
+.dqProjectsDialog .dqProjectsGrid th:nth-child(4) {
+	width: 80px;
+}
+
+.dqProjectsDialog .dqProjectsGrid th:nth-child(5) {
+	width: 125px;
+}
+
+.dqProjectsDialog .dqProjectsGrid td {
+	padding: 6px 8px;
+	border-top: 1px solid #e0e0e0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.dqProjectsDialog .dqProjectsGrid tbody tr:hover {
+	background: #f2f4f8;
+}
+
+.dqProjectsDialog .dqProjectsGrid tbody tr.dqSelected {
+	background: #d0e2ff;
+}
+
+.dqProjectsDialog .dqProjectsEmpty {
+	padding: 24px;
+	text-align: center;
+	color: #525252;
+}
+
+.dqProjectsDialog .dqProjectsForm {
+	margin: 0 0 8px;
+	padding: 8px 12px 12px;
+	border: 1px solid #c6c6c6;
+}
+
+.dqProjectsDialog .dqProjectsForm legend {
+	padding: 0 4px;
+	font-weight: 600;
+}
+
+.dqProjectsDialog .dqProjectsFormActions {
+	display: flex;
+	gap: 4px;
+	justify-content: flex-end;
+}
+
+.dqSaveQueryDialog .dqProjectSelect {
+	min-width: 240px;
+}
+
+/* ==== Feature DQResults ("Resultados de consultas", copia de GQViewFeature): todo bajo .dqResultsPane ==== */
+
+.DQResultsLaunchIcon {
+	width: 32px;
+	height: 32px;
+	background: url('images/dqResultsLaunch.png') no-repeat;
+}
+
+.dqResultsPane {
+	position: relative;
+}
+
+.dqResultsPane .dqResultsMainContainer {
+	width: 100%;
+	height: 100%;
+	padding: 10px;
+	box-sizing: border-box;
+}
+
+.dqResultsPane .dqResultsCard {
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+	padding: 12px;
+	box-sizing: border-box;
+}
+
+/* Barra de búsqueda */
+.dqResultsPane .dqResultsSearchPane {
+	padding: 10px;
+}
+
+.dqResultsPane .dqResultsSearchRow {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	padding: 10px 15px;
+	background-color: #fff;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.dqResultsPane .dqResultsSearchField {
+	width: 200px;
+}
+
+/* Columna izquierda: árbol arriba, propiedades abajo */
+.dqResultsPane .dqResultsSideColumn {
+	width: 300px;
+}
+
+.dqResultsPane .dqResultsPropertiesPanel {
+	height: 150px;
+}
+
+.dqResultsPane .dqResultsGrid {
+	width: 100%;
+	height: 100%;
+}
+
+.dqResultsPane .dqResultsTreePanel {
+	display: flex;
+	flex-direction: column;
+}
+
+.dqResultsPane .dqResultsTreePanel h3 {
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 8px;
+	font-weight: bold;
+	color: #333;
+}
+
+.dqResultsPane .dqResultsTreeContainer {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 5px;
+}
+
+.dqResultsPane .dqResultsTreeContainer .dijitTree {
+	height: 100%;
+	max-height: 100%;
+}
+
+.dqResultsPane .dqResultsTreeContainer::-webkit-scrollbar {
+	width: 8px;
+}
+
+.dqResultsPane .dqResultsTreeContainer::-webkit-scrollbar-thumb {
+	background-color: rgba(0, 0, 0, 0.3);
+	border-radius: 4px;
+}
+
+.dqResultsPane .dqResultsTreeContainer::-webkit-scrollbar-thumb:hover {
+	background-color: rgba(0, 0, 0, 0.5);
+}
+
+.dqResultsPane .dqResultsTreeContainer .dijitTreeRow {
+	padding: 3px 6px;
+	border-radius: 4px;
+	transition: background-color 0.2s ease;
+}
+
+.dqResultsPane .dqResultsTreeContainer .dijitTreeRow:hover {
+	background-color: #f0f4f8;
+}
+
+.dqResultsPane .dqResultsTreeContainer .dijitTreeLabel {
+	font-size: 13px;
+	color: #333;
+}
+
+/* Iconos del árbol por tipo de documento */
+.dqResultsPane .dqResultsTreeContainer .dijitTreeIcon {
+	width: 20px;
+	height: 20px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	margin-right: 5px;
+}
+
+.dqResultsPane .dqResultsTreeContainer .dijitFolderClosed {
+	background-image: url('images/dqResults/folder.svg');
+}
+
+.dqResultsPane .dqResultsTreeContainer .dijitFolderOpened {
+	background-image: url('images/dqResults/folder-open.svg');
+}
+
+.dqResultsPane .dqResultsIconFile {
+	background-image: url('images/dqResults/file.svg');
+}
+
+.dqResultsPane .dqResultsIconPdf {
+	background-image: url('images/dqResults/pdf-file.svg');
+}
+
+.dqResultsPane .dqResultsIconTiff {
+	background-image: url('images/dqResults/tiff.svg');
+}
+
+.dqResultsPane .dqResultsIconJpg {
+	background-image: url('images/dqResults/jpg.svg');
+}
+
+.dqResultsPane .dqResultsIconPng {
+	background-image: url('images/dqResults/png.svg');
+}
+
+.dqResultsPane .dqResultsIconDoc {
+	background-image: url('images/dqResults/word.svg');
+}
+
+.dqResultsPane .dqResultsIconXls {
+	background-image: url('images/dqResults/excel.svg');
+}
+
+/* Visor */
+.dqResultsPane .dqResultsViewer {
+	width: 100%;
+	height: 100%;
+	border: 1px solid #ccc;
+	box-sizing: border-box;
+	overflow: auto;
+}
+
+.dqResultsPane .dqResultsViewerFrame {
+	width: 100%;
+	height: 100%;
+	border: none;
+}
+
+.dqResultsPane .dqResultsViewerImage {
+	max-width: 100%;
+	height: auto;
+}
+
+/* Overlay de carga */
+.dqResultsPane .dqResultsLoading {
+	display: none;
+}
+
+.dqResultsPane .dqResultsLoading.dqResultsLoadingVisible {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(255, 255, 255, 0.7);
+	z-index: 999;
+}

@@ -1,0 +1,36 @@
+# Eclipse
+bin/
+.metadata/
+.recommenders/
+.loadpath
+.externalToolBuilders/
+*.launch
+.factorypath
+.apt_generated/
+.apt_generated_tests/
+local.properties
+*.tmp
+*.bak
+*~.nib
+tmp/
+
+# Third-party jars (proprietary, provide locally)
+lib/
+
+# Ant build output
+temp/
+DynamicQueriesICNPlugin.jar
+
+# Java
+*.class
+*.log
+hs_err_pid*
+
+# macOS
+.DS_Store
+._*
+
+# IDEs
+.idea/
+*.iml
+.vscode/

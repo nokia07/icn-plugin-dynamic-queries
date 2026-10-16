@@ -1,0 +1,83 @@
+<div class="ecmCenterPane dqResultsPane">
+	<div data-dojo-type="idx/layout/BorderContainer"
+		data-dojo-props="gutters:false, liveSplitters:true"
+		class="dqResultsMainContainer">
+
+		<div data-dojo-type="dijit/layout/BorderContainer"
+			data-dojo-props="region:'center', gutters:true, liveSplitters:true">
+
+			<!-- Barra de búsqueda superior -->
+			<div data-dojo-type="dijit/layout/ContentPane"
+				data-dojo-props="region:'top'"
+				class="dqResultsSearchPane">
+				<div class="dqResultsSearchRow">
+					<label for="${id}_tipoId">Tipo de identificación:</label>
+					<select data-dojo-type="dijit/form/Select" id="${id}_tipoId"
+						data-dojo-attach-point="tipoIdField" class="dqResultsSearchField">
+						<option value="CC">Cédula de ciudadanía</option>
+						<option value="CE">Cédula de extranjería</option>
+						<option value="PAS">Pasaporte</option>
+						<option value="TI">Tarjeta de Identidad</option>
+						<option value="RCN">Registro Civil</option>
+						<option value="NUIP">Número Único de Identificación</option>
+						<option value="CD">Carnet Diplomático</option>
+						<option value="ASI">Adulto Sin Identificación</option>
+						<option value="FI">Fideicomiso</option>
+						<option value="MSI">Menor Sin Identificación</option>
+						<option value="NIT">NIT</option>
+						<option value="RM">Registro Mercantil</option>
+						<option value="SE">Sociedad Extranjera sin NIT en Colombia</option>
+						<option value="PT">Permiso Temporal</option>
+						<option value="PE">Permiso Especial de Permanencia</option>
+					</select>
+
+					<label for="${id}_numId">Número de identificación:</label>
+					<input data-dojo-type="dijit/form/TextBox" id="${id}_numId"
+						data-dojo-attach-point="numIdField" class="dqResultsSearchField">
+
+					<button type="button" data-dojo-type="dijit/form/Button"
+						data-dojo-attach-point="searchButton"
+						data-dojo-attach-event="onClick: _onSearch">Buscar</button>
+				</div>
+			</div>
+
+			<!-- Cuerpo: dos columnas -->
+			<div data-dojo-type="dijit/layout/BorderContainer"
+				data-dojo-props="region:'center', design:'sidebar', gutters:true, liveSplitters:true">
+
+				<!-- Columna izquierda -->
+				<div data-dojo-type="dijit/layout/BorderContainer"
+					data-dojo-props="region:'leading', splitter:true"
+					class="dqResultsSideColumn">
+
+					<!-- Panel superior: árbol de documentos -->
+					<div data-dojo-type="dijit/layout/ContentPane"
+						data-dojo-props="region:'center'"
+						class="dqResultsCard dqResultsTreePanel">
+						<h3>Árbol de Documentos</h3>
+						<div data-dojo-attach-point="treeNode" class="dqResultsTreeContainer"></div>
+					</div>
+
+					<!-- Panel inferior: propiedades del documento -->
+					<div data-dojo-type="dijit/layout/ContentPane"
+						data-dojo-props="region:'bottom', splitter:true"
+						class="dqResultsCard dqResultsPropertiesPanel">
+						<div data-dojo-attach-point="gridNode" class="dqResultsGrid"></div>
+					</div>
+				</div>
+
+				<!-- Columna derecha: visor -->
+				<div data-dojo-type="dijit/layout/ContentPane"
+					data-dojo-props="region:'center'"
+					class="dqResultsCard">
+					<div data-dojo-attach-point="viewerNode" class="dqResultsViewer"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Overlay de carga -->
+	<div data-dojo-attach-point="loadingNode" class="dqResultsLoading" role="status">
+		<div class="dqResultsLoadingText">Cargando, por favor espere...</div>
+	</div>
+</div>
