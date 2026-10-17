@@ -15,16 +15,19 @@ define([
 function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTextarea, ValidationTextBox, BaseDialog, DqApiClient,
 		QuerySerializer) {
 
-	// Límites del servicio de consultas y de asociaciones.
+	// Límites del servicio de consultas y de asociaciones: config de la consulta (la definición) es un CLOB sin límite;
+	// el de la asociación (ruta de agrupación) sigue siendo de 1024.
 	var MAX_NAME = 100;
-	var MAX_CESQL = 512;
-	var MAX_CONFIG = 1024;
+	var MAX_CESQL = 4000;
+	var MAX_GROUPING_CONFIG = 1024;
 
 	/**
 	 * @name dynamicQueriesDojo.SaveQueryDialog
 	 * @class Guarda la consulta en el servicio de consultas (DqApiClient, /query) con el modelo
-	 *        { name, cesql, config, status } y la asocia a un proyecto (/project-query) con la ruta de configuración
-	 *        como config de la asociación. El usuario indica nombre, proyecto, ruta y estado; cesql se genera de la
+	 *        { name, cesql, config, status } (cesql hasta 4000 caracteres; config sin límite) y la asocia a un proyecto (/project-query) con la ruta de agrupación de
+	 *        los resultados como config de la asociación, en el formato de DSCONFIG de la consulta general
+	 *        ({ vnRoot: "Carpeta,Subcarpeta" }, QuerySerializer.toGroupingConfig). El usuario indica nombre, proyecto,
+	 *        ruta y estado; cesql (con los comodines como #Nombre) se genera de la
 	 *        definición (QuerySerializer.toCeSql) y config es la definición como JSON, que permite volver a abrirla en
 	 *        el constructor. Con query.id actualiza la consulta (y su asociación) en lugar de crear otra.
 	 *
@@ -63,11 +66,7 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 				this._config = JSON.stringify(this.query.definition);
 				if (this._cesql && this._cesql.length > MAX_CESQL) {
 					errors.push("El CE SQL generado tiene " + this._cesql.length + " caracteres y el servicio admite " +
-						MAX_CESQL + ". Reduzca las condiciones o las columnas.");
-				}
-				if (this._config.length > MAX_CONFIG) {
-					errors.push("La definición de la consulta tiene " + this._config.length + " caracteres y el servicio " +
-						"admite " + MAX_CONFIG + ". Reduzca las condiciones o las columnas.");
+						MAX_CESQL + ". Reduzca las condiciones.");
 				}
 			}
 			this._invalid = errors.length > 0;
@@ -91,13 +90,17 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 			});
 			this._addRow(table, "Proyecto:", this._projectField, true);
 
+			// Carpetas en las que se agrupan los resultados, separadas por comas; sin comillas porque van dentro de vnRoot.
 			this._pathField = new ValidationTextBox({
 				required: true,
 				trim: true,
 				propercase: false,
-				maxLength: MAX_CONFIG
+				maxLength: MAX_GROUPING_CONFIG - 20,
+				regExp: '[^"]*[^",\\s][^"]*',
+				invalidMessage: "Escriba las carpetas separadas por comas, sin comillas.",
+				placeHolder: "Expediente Afiliado,Pensión Voluntaria,Afiliaciones"
 			});
-			this._addRow(table, "Ruta de configuración:", this._pathField, true);
+			this._addRow(table, "Ruta de agrupación:", this._pathField, true);
 
 			this._statusField = new Select({
 				options: [ { label: "Activa", value: "ACTIVE" }, { label: "Inactiva", value: "INACTIVE" } ],
@@ -108,6 +111,18 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 			// Solo lectura: se genera de lo que el usuario definió en el constructor.
 			this._cesqlField = new SimpleTextarea({ rows: 5, readOnly: true, value: this._cesql || "", "class": "dqCesql" });
 			this._addRow(table, "CE SQL:", this._cesqlField);
+
+			var parameters = QuerySerializer.getParameters(this.query.definition);
+			if (parameters.length) {
+				var parametersRow = domConstruct.create("tr", null, table);
+				domConstruct.create("td", { "class": "propertyRowLabel", textContent: "Comodines:" }, parametersRow);
+				domConstruct.create("td", {
+					"class": "propertyRowValue",
+					textContent: array.map(parameters, function(parameter) {
+						return "#" + parameter.name + " (" + parameter.label + ")";
+					}).join(", ")
+				}, parametersRow);
+			}
 
 			if (this._invalid) {
 				this.setMessage("La consulta todavía no se puede guardar: " + errors.join(" "), "error");
@@ -154,7 +169,7 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 				this._projectField.set("value", this._association ? String(this._association.projectId) : "");
 				this._projectField.set("disabled", false);
 				if (this._association) {
-					this._pathField.set("value", this._association.config || "");
+					this._pathField.set("value", QuerySerializer.fromGroupingConfig(this._association.config));
 				}
 				this._saveButton.set("disabled", this._invalid);
 			}), lang.hitch(this, function(error) {
@@ -181,14 +196,14 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 				config: this._config,
 				status: this._statusField.get("value")
 			};
-			var path = this._pathField.get("value");
+			var groupingConfig = QuerySerializer.toGroupingConfig(this._pathField.get("value"));
 			var savedQuery;
 
 			// 1. La consulta.
 			(isNew ? DqApiClient.createQuery(body) : DqApiClient.updateQuery(this.query.id, body)).then(lang.hitch(this, function(saved) {
 				savedQuery = saved;
 				// 2. Con su id, la asociación al proyecto.
-				return this._saveAssociation(projectId, saved.id, path).then(null, lang.hitch(this, function(error) {
+				return this._saveAssociation(projectId, saved.id, groupingConfig).then(null, lang.hitch(this, function(error) {
 					return this._onAssociationFailed(isNew, saved, error);
 				}));
 			})).then(lang.hitch(this, function() {
@@ -200,17 +215,17 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 			}));
 		},
 
-		// Crea la asociación o, al editar, actualiza la existente si cambió el proyecto o la ruta.
-		_saveAssociation: function(projectId, queryId, path) {
+		// Crea la asociación o, al editar, actualiza la existente si cambió el proyecto o la ruta de agrupación.
+		_saveAssociation: function(projectId, queryId, groupingConfig) {
 			var current = this._association;
-			var association = { projectId: projectId, queryId: queryId, config: path };
+			var association = { projectId: projectId, queryId: queryId, config: groupingConfig };
 			if (!current) {
 				return DqApiClient.createProjectQuery(association).then(lang.hitch(this, function(created) {
 					this._association = created;
 					return created;
 				}));
 			}
-			if (current.projectId === projectId && current.config === path) {
+			if (current.projectId === projectId && current.config === groupingConfig) {
 				return when(current);
 			}
 			return DqApiClient.updateProjectQuery(current.id, association).then(lang.hitch(this, function(updated) {

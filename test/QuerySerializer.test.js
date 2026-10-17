@@ -30,9 +30,11 @@ st.criteria = [
 ];
 let r = S.build(st);
 assert.deepStrictEqual(r.errors, []);
-assert.deepStrictEqual(r.definition.scope, { folderId: "{0F1E}", folderPath: "/", includeSubfolders: true });
+// Compacta: la raíz con subcarpetas no se guarda, ni el nombre visible de la clase ni el label de las condiciones
+assert.strictEqual(r.definition.scope, undefined);
+assert.deepStrictEqual(r.definition.documentClass, { symbolicName: "Document", includeSubclasses: true });
 assert.strictEqual(r.definition.criteria.length, 2);
-assert.deepStrictEqual(r.definition.criteria[0], { type: "condition", property: "DocumentTitle", label: "Título del documento", dataType: "STRING", operator: "STARTS_WITH", values: ["POL-"] });
+assert.deepStrictEqual(r.definition.criteria[0], { type: "condition", property: "DocumentTitle", dataType: "STRING", operator: "STARTS_WITH", values: ["POL-"] });
 assert.strictEqual(r.definition.criteria[1].match, "ANY");
 assert.strictEqual(r.definition.criteria[1].criteria.length, 2);
 assert.deepStrictEqual(r.definition.criteria[1].criteria[1].values, [1, 2]);
@@ -45,7 +47,7 @@ st = base(); st.matchAll = false;
 st.criteria = [c("DateCreated", "xs:timestamp", "BETWEEN", ["2026-03-15T00:00:00.000-05:00", ""], "Añadido el"), c("Asunto", "xs:string", "NULL", [""])];
 r = S.build(st);
 assert.deepStrictEqual(r.errors, ["“Añadido el”: el operador de rango requiere dos valores."]);
-assert.deepStrictEqual(r.definition.criteria, [{ type: "condition", property: "Asunto", label: "Asunto", dataType: "STRING", operator: "IS_NULL", values: [] }]);
+assert.deepStrictEqual(r.definition.criteria, [{ type: "condition", property: "Asunto", dataType: "STRING", operator: "IS_NULL", values: [] }]);
 assert.strictEqual(r.definition.match, "ANY");
 
 // 3. BETWEEN completo, booleano, sin carpeta
@@ -72,6 +74,9 @@ st.folder = { item: { id: "Folder,{B879},{80A2}", attributes: { PathName: "/Carg
 assert.strictEqual(S.build(st).definition.scope.folderPath, "/Carga CRM");
 st.folder = { item: { id: "Folder,{B879},{80A2}" }, path: "\\Proteccion\\Carga CRM\\2026", includeSubfolders: false };
 assert.strictEqual(S.build(st).definition.scope.folderPath, "/Carga CRM/2026");
+// La raíz sin subcarpetas sí restringe (solo lo archivado en la raíz): se guarda
+st.folder = { item: { id: "Folder,{B879},{0F1E}" }, path: "\\Proteccion", includeSubfolders: false };
+assert.deepStrictEqual(S.build(st).definition.scope, { folderId: "{0F1E}", folderPath: "/", includeSubfolders: false });
 
 // 7. Ida y vuelta: build → toIcnSearch devuelve el formato de ICN con los mismos datos
 st = base(); st.matchAll = false;
@@ -84,10 +89,10 @@ st.criteria = [
 const def = S.build(st).definition;
 const icn = S.toIcnSearch(def, st.repository);
 assert.strictEqual(icn.andSearch, false);
-assert.deepStrictEqual(icn.search_classes, [{ name: "Document", displayName: "Documento", searchSubclasses: true, objectType: "document" }]);
-assert.deepStrictEqual(icn.search_folders, [{ id: "{0F1E}", pathName: "/", objectStoreId: "{B879}", objectStoreName: "Proteccion", searchSubfolders: true, view: "editable" }]);
+assert.deepStrictEqual(icn.search_classes, [{ name: "Document", displayName: "Document", searchSubclasses: true, objectType: "document" }]);
+assert.strictEqual(icn.search_folders, undefined);
 assert.deepStrictEqual(icn.moreOptions, { objectType: "document", versionOption: "allversions" });
-assert.deepStrictEqual(icn.criterias[0], { name: "DocumentTitle", label: "Título del documento", dataType: "xs:string", selectedOperator: "STARTSWITH", values: ["POL-"] });
+assert.deepStrictEqual(icn.criterias[0], { name: "DocumentTitle", label: "DocumentTitle", dataType: "xs:string", selectedOperator: "STARTSWITH", values: ["POL-"] });
 assert.deepStrictEqual(icn.criterias[1].values, ["2026-01-01T00:00:00.000-05:00", "2026-12-31T00:00:00.000-05:00"]);
 assert.strictEqual(icn.criterias[2].anded, true);
 assert.deepStrictEqual(icn.criterias[2].searchCriteria.map(x => [x.name, x.selectedOperator, x.values]), [["Aviso", "GREATER", ["5"]], ["ClienteVIP", "EQUAL", ["true"]]]);
@@ -101,6 +106,9 @@ assert.deepStrictEqual(S.build(back).definition.criteria, def.criteria);
 // 8. toSearchTemplate aplica el formato de ICN a una plantilla nueva; operadores desconocidos → Error
 const tpl = S.toSearchTemplate(def, st.repository, "Pólizas");
 assert.ok(/^NewSearch_dq_/.test(tpl.id) && tpl.name === "Pólizas" && tpl.applied.criterias.length === 3);
+// Marcas para que QueryTab restaure la clase (ICN la ignora en las búsquedas nuevas) y "Incluir subclases"
+assert.strictEqual(tpl.dqRestoreClass, true);
+assert.strictEqual(tpl.dqIncludeSubclasses, true);
 assert.throws(() => S.toIcnSearch(Object.assign({}, def, { criteria: [{ type: "condition", property: "X", dataType: "STRING", operator: "SOUNDS_LIKE", values: ["a"] }] }), st.repository), /no reconoce/);
 
 // 9. toCeSql: columnas ({NAME} → DocumentTitle, Id siempre primero), subclases, grupos OR, literales, carpeta, versión, orden
@@ -139,4 +147,74 @@ assert.throws(() => S.toCeSql(Object.assign({}, sqlDef, { criteria: [{ type: "co
 
 // 11. La definición de prueba 7 también se convierte (la que produce el constructor)
 assert.ok(/^SELECT d\.\[Id\], d\.\[DocumentTitle\], d\.\[DateCreated\] FROM \[Document\] d WITH INCLUDESUBCLASSES WHERE /.test(S.toCeSql(def)));
-console.log("OK: 11 casos");
+// 12. Comodines: la condición conserva su valor de ejemplo y lleva el nombre; el CE SQL usa #Nombre (con comillas en
+// texto y en LIKE, sin comillas en números y fechas), como en CG_CFG_QUERY. Las claves cuentan solo condiciones con valor.
+st = base();
+st.criteria = [
+  c("Vacia", "xs:string", "EQUAL", [""]),
+  c("NroIdentificacion", "xs:string", "EQUAL", ["71234567", ""]),
+  c("TipoIdentificacion", "xs:string", "EQUAL", ["CC", ""]),
+  c("Alcance", "xs:string", "EQUAL", ["A", ""]),
+  { anded: false, criteria: [c("Monto", "xs:integer", "GREATER", ["10", ""]), c("Nombre", "xs:string", "LIKE", ["ana", ""])] },
+  c("Fecha", "xs:timestamp", "LESS", ["2026-03-15T00:00:00.000-05:00", ""])
+];
+st.parameters = { "NroIdentificacion#1": "NroIdentificacion", "TipoIdentificacion#1": "TipoIdentificacion", "Monto#1": "MontoMin", "Nombre#1": "Nombre", "Fecha#1": "Hasta" };
+r = S.build(st);
+assert.deepStrictEqual(r.errors, []);
+assert.deepStrictEqual(r.definition.criteria[0], { type: "condition", property: "NroIdentificacion", dataType: "STRING", operator: "EQUAL", values: ["71234567"], label: "NroIdentificacion", parameter: "NroIdentificacion" });
+assert.deepStrictEqual(r.definition.criteria[2], { type: "condition", property: "Alcance", dataType: "STRING", operator: "EQUAL", values: ["A"] });
+assert.strictEqual(S.toCeSql(r.definition).split(" WHERE ")[1],
+  "d.[NroIdentificacion] = '#NroIdentificacion' AND d.[TipoIdentificacion] = '#TipoIdentificacion' AND d.[Alcance] = 'A'" +
+  " AND (d.[Monto] > #MontoMin OR d.[Nombre] LIKE '%#Nombre%') AND d.[Fecha] < #Hasta" +
+  " AND d.[VersionStatus] = 1 ORDER BY d.[DocumentTitle] ASC");
+assert.deepStrictEqual(S.getParameters(r.definition).map(p => p.name), ["NroIdentificacion", "TipoIdentificacion", "MontoMin", "Nombre", "Hasta"]);
+assert.deepStrictEqual(S.getParameters(r.definition)[2], { name: "MontoMin", property: "Monto", label: "Monto", dataType: "INTEGER", operator: "GREATER", sample: 10 });
+assert.deepStrictEqual(S.getConditions(r.definition).map(e => e.key), ["NroIdentificacion#1", "TipoIdentificacion#1", "Alcance#1", "Monto#1", "Nombre#1", "Fecha#1"]);
+// Reabrir: las claves de getConditions reconstruyen los comodines y el resultado es el mismo
+const reopened = {};
+S.getConditions(r.definition).forEach(e => { if (e.condition.parameter) reopened[e.key] = e.condition.parameter; });
+assert.deepStrictEqual(reopened, st.parameters);
+// El comodín no llega a ICN: al reabrir se ve el valor de ejemplo
+assert.deepStrictEqual(S.toIcnSearch(r.definition, { objectStoreId: "{B879}", objectStoreName: "Proteccion" }).criterias[0].values, ["71234567"]);
+
+// 13. Comodines no válidos: operador de varios valores, nombre con espacios, nombre repetido
+st = base();
+st.criteria = [c("A", "xs:string", "INANY", ["x", "y"]), c("B", "xs:string", "EQUAL", ["b"]), c("C", "xs:string", "EQUAL", ["c"]), c("D", "xs:string", "EQUAL", ["d"])];
+st.parameters = { "A#1": "A", "B#1": "mal nombre", "C#1": "Repetido", "D#1": "Repetido" };
+r = S.build(st);
+assert.strictEqual(r.errors.length, 3);
+assert.ok(/no admite este operador/.test(r.errors[0]));
+assert.ok(/debe empezar por una letra/.test(r.errors[1]));
+assert.ok(/#Repetido está en más de una condición/.test(r.errors[2]));
+assert.strictEqual(S.canBeParameter({ operator: "BETWEEN", dataType: "DATETIME" }), false);
+assert.strictEqual(S.canBeParameter({ operator: "STARTS_WITH", dataType: "STRING" }), true);
+
+// 14. Ruta de agrupación ↔ config de la asociación con el formato DSCONFIG de CG_CFG_QUERY
+assert.strictEqual(S.toGroupingConfig(" Expediente Afiliado, Pensión Voluntaria ,,Afiliaciones "),
+  '{ vnRoot: "Expediente Afiliado,Pensión Voluntaria,Afiliaciones" }');
+assert.strictEqual(S.fromGroupingConfig('{ vnRoot: "Expediente Afiliado,Pensión Voluntaria,Afiliaciones" }'), "Expediente Afiliado,Pensión Voluntaria,Afiliaciones");
+assert.strictEqual(S.fromGroupingConfig("ruta/antigua"), "ruta/antigua");
+assert.strictEqual(S.fromGroupingConfig(null), "");
+// 15. Tamaño: el registro de ejemplo de CG_CFG_QUERY (4 condiciones, 2 comodines) como lo arma serialize (sin
+// visualización de resultados, raíz con subcarpetas): 1128 caracteres antes de compactar
+st = base(); st.resultsDisplay = null; st.contentClass = { id: "Afiliaciones", name: "Afiliaciones" }; st.includeSubclasses = false;
+st.criteria = [
+  c("NroIdentificacion", "xs:string", "EQUAL", ["71234567", ""], "Numero de Identificacion"),
+  c("TipoIdentificacion", "xs:string", "EQUAL", ["CC", ""], "Tipo de Identificacion"),
+  c("Alcance", "xs:string", "EQUAL", ["A", ""], "Alcance"),
+  c("LineaProducto", "xs:string", "EQUAL", ["V", ""], "Linea de Producto")
+];
+st.parameters = { "NroIdentificacion#1": "NroIdentificacion", "TipoIdentificacion#1": "TipoIdentificacion" };
+r = S.build(st);
+assert.deepStrictEqual(r.errors, []);
+const size = JSON.stringify(r.definition).length;
+assert.ok(size < 1024, "config de " + size + " caracteres");
+assert.strictEqual(S.toCeSql(r.definition),
+  "SELECT d.[Id], d.[DocumentTitle] FROM [Afiliaciones] d WITH EXCLUDESUBCLASSES WHERE d.[NroIdentificacion] = '#NroIdentificacion'" +
+  " AND d.[TipoIdentificacion] = '#TipoIdentificacion' AND d.[Alcance] = 'A' AND d.[LineaProducto] = 'V' AND d.[VersionStatus] = 1");
+// 16. keepLabels (diálogo de comodines): todas las condiciones con su nombre visible; sin él, solo los comodines
+st.keepLabels = true;
+assert.deepStrictEqual(S.build(st).definition.criteria.map(x => x.label), ["Numero de Identificacion", "Tipo de Identificacion", "Alcance", "Linea de Producto"]);
+st.keepLabels = false;
+assert.deepStrictEqual(S.build(st).definition.criteria.map(x => x.label), ["Numero de Identificacion", "Tipo de Identificacion", undefined, undefined]);
+console.log("OK: 16 casos (config del ejemplo: " + size + " caracteres)");

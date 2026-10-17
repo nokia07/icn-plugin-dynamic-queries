@@ -8,12 +8,37 @@ define([
 	"dijit/Dialog",
 	"dijit/form/Button",
 	"ecm/widget/search/SearchBuilder",
+	"ecm/widget/search/BasicSearchDefinition",
 	"ecm/widget/listView/modules/Toolbar2",
 	"dynamicQueriesDojo/QuerySerializer",
-	"dynamicQueriesDojo/SaveQueryDialog"
+	"dynamicQueriesDojo/SaveQueryDialog",
+	"dynamicQueriesDojo/ParametersDialog"
 ],
-function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, SearchBuilder, Toolbar2,
-		QuerySerializer, SaveQueryDialog) {
+function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, SearchBuilder, BasicSearchDefinition,
+		Toolbar2, QuerySerializer, SaveQueryDialog, ParametersDialog) {
+
+	// ICN ignora la clase de una búsqueda nueva (isNew(), id "NewSearch_…"): _initContentClassSelector elige la primera
+	// del árbol (Document) y, aunque mantiene las condiciones, la consulta reabierta queda sobre otra clase. Elegir la
+	// clase después no sirve (ICN rehace el formulario y borra las condiciones), y un id no nuevo hace que ICN busque y
+	// bloquee la plantilla en P8. Por eso, solo para las plantillas de QuerySerializer.toSearchTemplate (dqRestoreClass)
+	// y solo mientras se inicializa el selector, la plantilla se presenta como no nueva: ICN selecciona su clase y luego
+	// dibuja las condiciones, como con sus búsquedas guardadas. Verificado en ICN 3.0.10.
+	aspect.around(BasicSearchDefinition.prototype, "_initContentClassSelector", function(original) {
+		return function(reset) {
+			var template = this.searchTemplate;
+			if (!template || !template.dqRestoreClass || reset) {
+				return original.apply(this, arguments);
+			}
+			template.isNew = function() {
+				return false;
+			};
+			try {
+				return original.apply(this, arguments);
+			} finally {
+				delete template.isNew;
+			}
+		};
+	});
 
 	// Acciones de la barra de resultados que DQ no ofrece (ids verificados en ICN 3.0.10): "Añadir documento" y
 	// "Exportar todo". "Acciones" se quita con la opción showActionsButton del módulo.
@@ -104,6 +129,10 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 		// true para ejecutar la búsqueda apenas el formulario termine de cargar ("Ejecutar" desde el árbol).
 		runOnOpen: false,
 
+		// Comodines de la consulta: { clave: nombre } (claves de QuerySerializer.getConditions). Al abrir una consulta
+		// guardada vienen de su definición.
+		parameters: null,
+
 		postCreate: function() {
 			this.inherited(arguments);
 			var searchDefinition = this.searchDefinition;
@@ -130,6 +159,13 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 			this.own(saveQueryButton);
 			saveQueryButton.placeAt(searchDefinition.saveAsButton.domNode, "after");
 
+			this._parametersButton = new Button({
+				onClick: lang.hitch(this, this._showParametersDialog)
+			});
+			this.own(this._parametersButton);
+			this._parametersButton.placeAt(saveQueryButton.domNode, "after");
+			this._setParameters(this.parameters || {});
+
 			var viewJsonButton = new Button({
 				label: "Ver JSON",
 				onClick: lang.hitch(this, this._showJson)
@@ -137,12 +173,16 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 			this.own(viewJsonButton);
 			viewJsonButton.placeAt(searchDefinition.cancelButton.domNode, "after");
 
-			if (this.initialResultsDisplay || this.runOnOpen) {
+			var restoredClass = this.searchTemplate && this.searchTemplate.dqRestoreClass;
+			if (this.initialResultsDisplay || this.runOnOpen || restoredClass) {
 				// El formulario queda listo cuando ICN fija la visualización de resultados de la clase (verificado en
 				// ICN 3.0.10: setContentClass y enseguida setResultsDisplay con la predeterminada).
 				var resultsDisplayOptions = searchDefinition.resultsDisplayOptions;
 				var formReady = aspect.after(resultsDisplayOptions, "setResultsDisplay", lang.hitch(this, function() {
 					formReady.remove();
+					if (restoredClass) {
+						this._restoreIncludeSubclasses();
+					}
 					if (this.initialResultsDisplay) {
 						resultsDisplayOptions.setResultsDisplay(lang.clone(this.initialResultsDisplay));
 					}
@@ -151,6 +191,19 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 					}
 				}), true);
 				this.own(formReady);
+			}
+		},
+
+		// Al restaurar la clase, ICN deja marcado "Incluir subclases" aunque la plantilla diga lo contrario. Cambiarlo
+		// no rehace el formulario, pero la etiqueta del selector ("Clase (Incluye subclases)") no se actualiza sola.
+		_restoreIncludeSubclasses: function() {
+			var classSelector = this.searchDefinition.contentClassSelector;
+			var includeSubclasses = !!this.searchTemplate.dqIncludeSubclasses;
+			if (classSelector.isIncludeSubclasses() !== includeSubclasses && classSelector.getSelected()) {
+				classSelector.setIncludeSubclasses(includeSubclasses);
+				if (!includeSubclasses) {
+					classSelector._setSelectedItemLabel(classSelector.getSelected());
+				}
 			}
 		},
 
@@ -186,7 +239,28 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 		 * Definición de la consulta según el contrato de la API: { definition, errors }.
 		 */
 		getQueryDefinition: function() {
-			return QuerySerializer.serialize(this.searchDefinition, this.repository);
+			return QuerySerializer.serialize(this.searchDefinition, this.repository, this.parameters);
+		},
+
+		_setParameters: function(parameters) {
+			this.parameters = parameters;
+			var count = 0;
+			for (var key in parameters) {
+				count++;
+			}
+			this._parametersButton.set("label", count ? "Comodines (" + count + ")" : "Comodines");
+		},
+
+		_showParametersDialog: function() {
+			var dialog = new ParametersDialog({
+				// Con los nombres visibles de las condiciones, que la definición que se guarda no lleva.
+				definition: QuerySerializer.serialize(this.searchDefinition, this.repository, this.parameters, true).definition,
+				parameters: this.parameters
+			});
+			dialog.own(dialog.on("apply", lang.hitch(this, this._setParameters)), dialog.on("hide", function() {
+				dialog.destroyRecursive();
+			}));
+			dialog.show();
 		},
 
 		_showSaveDialog: function() {

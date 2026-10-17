@@ -57,6 +57,34 @@ function(array, SearchTemplate) {
 	var RANGE_OPERATORS = { BETWEEN: true, NOT_BETWEEN: true };
 	var MULTI_VALUE_OPERATORS = { IN: true, NOT_IN: true };
 
+	// Comodines: condiciones cuyo valor se pide al ejecutar la consulta guardada. En el CE SQL el valor se reemplaza por
+	// #Nombre, la convención de CG_CFG_QUERY (consulta general): '#Nombre' entre comillas en texto, sin comillas en
+	// números, fechas, booleanos e ids. Solo operadores de un valor.
+	var PARAMETER_OPERATORS = {
+		EQUAL: true, NOT_EQUAL: true, LESS: true, LESS_OR_EQUAL: true, GREATER: true, GREATER_OR_EQUAL: true,
+		STARTS_WITH: true, ENDS_WITH: true, CONTAINS: true, NOT_CONTAINS: true
+	};
+	var PARAMETER_DATA_TYPES = { STRING: true, INTEGER: true, FLOAT: true, DATETIME: true, BOOLEAN: true, GUID: true };
+	var PARAMETER_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+	// Clave de una condición para asociarle un comodín: propiedad y número de aparición entre las condiciones con
+	// valor, en orden ("NroIdentificacion#1"). Así sobrevive a reabrir la consulta, que no conserva filas vacías.
+	function conditionKey(property, seen) {
+		seen[property] = (seen[property] || 0) + 1;
+		return property + "#" + seen[property];
+	}
+
+	// Recorre las condiciones de una definición en orden: fn(condition, key).
+	function forEachCondition(nodes, fn, seen) {
+		array.forEach(nodes || [], function(node) {
+			if (node.type === "group") {
+				forEachCondition(node.criteria, fn, seen);
+			} else {
+				fn(node, conditionKey(node.property, seen));
+			}
+		});
+	}
+
 	// ICN suele agregar un "" al final de values; los números y booleanos llegan como texto.
 	function cleanValues(values, dataType) {
 		var cleaned = array.filter(values || [], function(v) {
@@ -74,11 +102,11 @@ function(array, SearchTemplate) {
 	}
 
 	// Convierte un ecm.model.SearchCriterion o un ecm.model.SearchCriteria (grupo). Devuelve null si la fila quedó
-	// vacía: ICN también ignora esas filas al buscar.
-	function convertNode(node, errors) {
+	// vacía: ICN también ignora esas filas al buscar. context: { parameters: { clave: nombre }, seen: {} }.
+	function convertNode(node, errors, context) {
 		if (node.criteria) {
 			var children = array.filter(array.map(node.criteria, function(child) {
-				return convertNode(child, errors);
+				return convertNode(child, errors, context);
 			}), function(child) {
 				return child !== null;
 			});
@@ -108,14 +136,31 @@ function(array, SearchTemplate) {
 			values = values.slice(0, 1);
 		}
 
-		return {
+		// Sin label: el constructor muestra su propio nombre al reabrir y así config es más pequeño. Solo los
+		// comodines lo llevan, para que quien ejecuta la consulta pueda rotular el dato que pide (o todas las
+		// condiciones con context.keepLabels, para mostrarlas en el diseñador).
+		var condition = {
 			type: "condition",
 			property: node.id,
-			label: node.name,
 			dataType: dataType,
 			operator: operator,
 			values: values
 		};
+		var parameter = context.parameters[conditionKey(node.id, context.seen)];
+		if (parameter) {
+			if (!PARAMETER_OPERATORS[operator] || !PARAMETER_DATA_TYPES[dataType]) {
+				errors.push("“" + label + "”: el comodín #" + parameter + " no admite este operador o tipo de dato; use una " +
+					"condición de un solo valor (igual, distinto, mayor, menor, empieza, termina, contiene).");
+			} else if (!PARAMETER_NAME.test(parameter)) {
+				errors.push("“" + label + "”: el nombre del comodín “" + parameter + "” debe empezar por una letra y tener " +
+					"solo letras, números o _.");
+			}
+			condition.label = node.name;
+			condition.parameter = parameter;
+		} else if (context.keepLabels) {
+			condition.label = node.name;
+		}
+		return condition;
 	}
 
 	// "Folder,{object store},{carpeta}" → "{carpeta}"
@@ -204,14 +249,22 @@ function(array, SearchTemplate) {
 		}
 	}
 
+	// Marcador de un comodín en el CE SQL: '#Nombre' en texto (quien ejecuta lo reemplaza escapando las comillas),
+	// #Nombre en el resto de tipos (lo reemplaza por el literal de CE SQL del tipo).
+	function sqlParameter(node, prefix, suffix) {
+		var placeholder = (prefix || "") + "#" + node.parameter + (suffix || "");
+		return node.dataType === "STRING" || prefix || suffix ? "'" + placeholder + "'" : placeholder;
+	}
+
 	function sqlCondition(node) {
 		var property = sqlProperty(node.property);
 		var values = node.values;
 		var literal = function(value) {
-			return sqlLiteral(value, node.dataType);
+			return node.parameter ? sqlParameter(node) : sqlLiteral(value, node.dataType);
 		};
-		var like = function(pattern) {
-			return property + " LIKE " + sqlString(pattern);
+		var like = function(prefix, suffix) {
+			return property + " LIKE " +
+				(node.parameter ? sqlParameter(node, prefix, suffix) : sqlString(prefix + values[0] + suffix));
 		};
 		var anyEqual = function() {
 			return "(" + array.map(values, function(value) { return property + " = " + literal(value); }).join(" OR ") + ")";
@@ -223,10 +276,10 @@ function(array, SearchTemplate) {
 		case "LESS_OR_EQUAL": return property + " <= " + literal(values[0]);
 		case "GREATER": return property + " > " + literal(values[0]);
 		case "GREATER_OR_EQUAL": return property + " >= " + literal(values[0]);
-		case "STARTS_WITH": return like(values[0] + "%");
-		case "ENDS_WITH": return like("%" + values[0]);
-		case "CONTAINS": return like("%" + values[0] + "%");
-		case "NOT_CONTAINS": return "NOT (" + like("%" + values[0] + "%") + ")";
+		case "STARTS_WITH": return like("", "%");
+		case "ENDS_WITH": return like("%", "");
+		case "CONTAINS": return like("%", "%");
+		case "NOT_CONTAINS": return "NOT (" + like("%", "%") + ")";
 		case "BETWEEN": return "(" + property + " >= " + literal(values[0]) + " AND " + property + " <= " + literal(values[1]) + ")";
 		case "NOT_BETWEEN": return "NOT (" + property + " >= " + literal(values[0]) + " AND " + property + " <= " + literal(values[1]) + ")";
 		// Para propiedades de un solo valor; las multivaluadas usarían "valor IN d.[Propiedad]".
@@ -301,12 +354,15 @@ function(array, SearchTemplate) {
 		 *   moreOptions: { objectType, versionOption }, // SearchMoreOptions.getSelectedOptions()
 		 *   matchAll: boolean,                          // SearchPropertyOptions: coincidencia total
 		 *   criteria: Array,                            // AttributeDefinitionsForm.createSearchCriteriaFromAttributeDefintions()
-		 *   resultsDisplay: { columns, sortBy, sortAsc }
+		 *   resultsDisplay: { columns, sortBy, sortAsc },
+		 *   parameters: { clave: nombre },              // comodines (ver getConditions); opcional
+		 *   keepLabels: boolean                         // label en todas las condiciones (no para guardar); opcional
 		 * }
 		 * @return { definition: Object, errors: String[] } — errors vacío si la definición es válida.
 		 */
 		build: function(state) {
 			var errors = [];
+			var context = { parameters: state.parameters || {}, keepLabels: !!state.keepLabels, seen: {} };
 			var definition = {
 				schemaVersion: this.SCHEMA_VERSION,
 				repository: {
@@ -317,10 +373,12 @@ function(array, SearchTemplate) {
 				objectType: state.moreOptions.objectType || "document"
 			};
 
-			if (state.folder && state.folder.item) {
+			// La raíz con subcarpetas es todo el object store: no se guarda (ni restringe el CE SQL).
+			var path = state.folder && state.folder.item ? folderPath(state.folder, state.repository) : null;
+			if (path && !(path === "/" && state.folder.includeSubfolders)) {
 				definition.scope = {
 					folderId: folderGuid(state.folder.item.id),
-					folderPath: folderPath(state.folder, state.repository),
+					folderPath: path,
 					includeSubfolders: !!state.folder.includeSubfolders
 				};
 			}
@@ -328,7 +386,6 @@ function(array, SearchTemplate) {
 			if (state.contentClass) {
 				definition.documentClass = {
 					symbolicName: state.contentClass.id,
-					displayName: state.contentClass.name,
 					includeSubclasses: !!state.includeSubclasses
 				};
 			} else {
@@ -338,13 +395,23 @@ function(array, SearchTemplate) {
 			definition.versionSelection = VERSIONS[state.moreOptions.versionOption] || "releasedVersion";
 			definition.match = state.matchAll ? "ALL" : "ANY";
 			definition.criteria = array.filter(array.map(state.criteria || [], function(node) {
-				return convertNode(node, errors);
+				return convertNode(node, errors, context);
 			}), function(node) {
 				return node !== null;
 			});
 			if (!definition.criteria.length && !errors.length) {
 				errors.push("Defina al menos una condición con valor.");
 			}
+			var parameterNames = {};
+			forEachCondition(definition.criteria, function(condition) {
+				if (!condition.parameter) {
+					return;
+				}
+				if (parameterNames[condition.parameter]) {
+					errors.push("El comodín #" + condition.parameter + " está en más de una condición; use nombres distintos.");
+				}
+				parameterNames[condition.parameter] = true;
+			}, {});
 
 			if (state.resultsDisplay) {
 				definition.resultsDisplay = {
@@ -355,6 +422,64 @@ function(array, SearchTemplate) {
 			}
 
 			return { definition: definition, errors: errors };
+		},
+
+		/**
+		 * Condiciones de una definición en orden, con la clave que usa build para asociarles comodines:
+		 * [ { key, condition } ].
+		 */
+		getConditions: function(definition) {
+			var conditions = [];
+			forEachCondition(definition && definition.criteria, function(condition, key) {
+				conditions.push({ key: key, condition: condition });
+			}, {});
+			return conditions;
+		},
+
+		/** true si la condición (del contrato) puede ser un comodín. */
+		canBeParameter: function(condition) {
+			return !!(PARAMETER_OPERATORS[condition.operator] && PARAMETER_DATA_TYPES[condition.dataType]);
+		},
+
+		/**
+		 * Comodines de una definición, que quien ejecuta la consulta debe pedir y reemplazar en el CE SQL (#name):
+		 * [ { name, property, label, dataType, operator, sample } ]; sample es el valor de ejemplo del diseñador.
+		 */
+		getParameters: function(definition) {
+			var parameters = [];
+			forEachCondition(definition && definition.criteria, function(condition) {
+				if (condition.parameter) {
+					parameters.push({
+						name: condition.parameter,
+						property: condition.property,
+						label: condition.label || condition.property,
+						dataType: condition.dataType,
+						operator: condition.operator,
+						sample: condition.values[0]
+					});
+				}
+			}, {});
+			return parameters;
+		},
+
+		/**
+		 * Ruta de agrupación de los resultados ("Expediente Afiliado,Pensión Voluntaria") → config de la asociación
+		 * proyecto-consulta con el formato de DSCONFIG en CG_CFG_QUERY: { vnRoot: "…" } (no es JSON; así lo lee la
+		 * consulta general). Quita espacios y carpetas vacías.
+		 */
+		toGroupingConfig: function(path) {
+			var folders = array.filter(array.map(String(path || "").split(","), function(folder) {
+				return folder.trim();
+			}), function(folder) {
+				return folder.length > 0;
+			});
+			return "{ vnRoot: \"" + folders.join(",") + "\" }";
+		},
+
+		/** Inverso de toGroupingConfig; una config sin vnRoot (guardada antes como texto libre) se devuelve tal cual. */
+		fromGroupingConfig: function(config) {
+			var match = /vnRoot\s*:\s*"([^"]*)"/.exec(config || "");
+			return match ? match[1] : config || "";
 		},
 
 		/**
@@ -401,20 +526,27 @@ function(array, SearchTemplate) {
 		/**
 		 * SearchTemplate listo para abrir en el constructor con la definición guardada. Como ya trae sus criterios,
 		 * retrieveSearchCriteria no consulta al servidor; el id "NewSearch_…" hace que ICN la trate como búsqueda nueva
-		 * (no guardada en P8). Lanza Error si la definición usa operadores o tipos desconocidos.
+		 * (no guardada en P8: con otro id ICN la busca y la bloquea en P8). Con dqRestoreClass, QueryTab hace que ICN
+		 * respete su clase (ver QueryTab). Lanza Error si la definición usa operadores o tipos desconocidos.
 		 */
 		toSearchTemplate: function(definition, repository, name) {
 			var searchTemplate = new SearchTemplate({ id: "NewSearch_dq_" + new Date().getTime(), name: name, repository: repository });
 			searchTemplate._applyRetrievedSearchCriteria(this.toIcnSearch(definition, repository));
+			// ICN ignora la clase de las búsquedas nuevas y elige la primera (Document); QueryTab la restaura con estas
+			// marcas.
+			searchTemplate.dqRestoreClass = true;
+			searchTemplate.dqIncludeSubclasses = !!definition.documentClass.includeSubclasses;
 			return searchTemplate;
 		},
 
 		/**
 		 * Lee el formulario del constructor de ICN (BasicSearchDefinition) sin ejecutar la búsqueda y arma la
-		 * definición. Los valores de las filas no se copian al SearchTemplate hasta buscar, por eso se leen de los
+		 * definición, con los comodines indicados ({ clave: nombre }, ver getConditions). Sin la visualización de
+		 * resultados: DQ la oculta (siempre es la predeterminada de la clase). keepLabels agrega el nombre visible a
+		 * todas las condiciones, para mostrarlas (no para guardar). Los valores de las filas no se copian al SearchTemplate hasta buscar, por eso se leen de los
 		 * widgets.
 		 */
-		serialize: function(searchDefinition, repository) {
+		serialize: function(searchDefinition, repository, parameters, keepLabels) {
 			return this.build({
 				repository: repository,
 				folder: searchDefinition.folderSelector.getSelected(),
@@ -423,7 +555,8 @@ function(array, SearchTemplate) {
 				moreOptions: searchDefinition._moreOptions.getSelectedOptions(),
 				matchAll: searchDefinition._propertyOptions.getSelectedOptions().matchAll,
 				criteria: searchDefinition.attributeDefinitionFormWid.createSearchCriteriaFromAttributeDefintions(),
-				resultsDisplay: searchDefinition.resultsDisplayOptions.getResultsDisplay()
+				parameters: parameters,
+				keepLabels: keepLabels
 			});
 		}
 	};

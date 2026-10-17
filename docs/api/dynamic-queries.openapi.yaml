@@ -343,7 +343,9 @@ components:
           default: document
         scope:
           type: object
-          description: '"Buscar en". Si se omite, se busca en todo el object store.'
+          description: |
+            "Buscar en". Si se omite, se busca en todo el object store; el plug-in lo omite cuando es la raíz con
+            subcarpetas (lo que usa siempre DQ), así el CE SQL no lleva `INSUBFOLDER '/'`.
           required: [folderId, folderPath, includeSubfolders]
           properties:
             folderId:
@@ -366,7 +368,7 @@ components:
               example: Document
             displayName:
               type: string
-              description: Solo informativo; ICN usa symbolicName.
+              description: Solo informativo; ICN usa symbolicName. El plug-in ya no lo guarda (límite de tamaño de config).
               example: Documento
             includeSubclasses:
               type: boolean
@@ -384,7 +386,9 @@ components:
             $ref: '#/components/schemas/CriteriaNode'
         resultsDisplay:
           type: object
-          description: '"Visualización de resultados" de ICN.'
+          description: |
+            "Visualización de resultados" de ICN. El plug-in ya no la guarda: DQ la oculta (siempre es la predeterminada
+            de la clase) y config tiene un límite de tamaño; sin ella el CE SQL selecciona Id y DocumentTitle.
           required: [columns]
           properties:
             columns:
@@ -429,7 +433,9 @@ components:
           example: DocumentTitle
         label:
           type: string
-          description: Nombre visible; solo informativo.
+          description: |
+            Nombre visible. El plug-in solo lo guarda en los comodines (`parameter`), para rotular el dato que se pide al
+            ejecutar; en el resto el constructor muestra su propio nombre.
           example: Título del documento
         dataType:
           $ref: '#/components/schemas/DataType'
@@ -446,6 +452,19 @@ components:
               - type: string
               - type: number
               - type: boolean
+        parameter:
+          type: string
+          pattern: '^[A-Za-z][A-Za-z0-9_]*$'
+          description: |
+            Comodín: el valor se pide al ejecutar la consulta guardada. `values` conserva el valor de ejemplo con que
+            se probó en el diseñador. En el CE SQL el valor se escribe como `#<parameter>`, la convención de
+            CG_CFG_QUERY de la consulta general: `'#Nombre'` entre comillas en STRING y dentro del patrón en
+            STARTS_WITH/ENDS_WITH/CONTAINS/NOT_CONTAINS (`'%#Nombre%'`); sin comillas en INTEGER, FLOAT, DATETIME,
+            BOOLEAN y GUID. Quien ejecuta reemplaza `#Nombre` (completo, no como prefijo de otro nombre) por el valor:
+            en texto duplicando las comillas simples; en el resto, con el literal de CE SQL del tipo (fecha como
+            `20260315T050000Z` en UTC, booleano TRUE/FALSE, GUID entre llaves). Solo en operadores de un valor
+            (no IN/NOT_IN, BETWEEN/NOT_BETWEEN ni IS_NULL/IS_NOT_NULL), y único dentro de la definición.
+          example: NroIdentificacion
 
     Group:
       type: object
