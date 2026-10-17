@@ -106,22 +106,26 @@ function(declare,
 
 	// Comodines de las consultas de un proyecto, sin repetir: el mismo #Nombre en varias consultas es un solo campo
 	// (como #NroIdentificacion en las de la consulta general); el rótulo y el tipo son los de la primera. sources son
-	// las { className, property } de todas, donde se busca la lista de opciones.
+	// las { className, property } de todas, donde se busca la lista de opciones. Ordenados por el orden que les dio el
+	// diseñador (el menor si el comodín está en varias consultas); los que no tienen, al final en el orden en que aparecen.
 	function projectParameters(queries) {
 		var parameters = [];
 		var byName = {};
 		array.forEach(queries, function(query) {
 			array.forEach(QuerySerializer.getQueryParameters(query), function(parameter) {
-				if (!byName[parameter.name]) {
-					byName[parameter.name] = lang.mixin({ sources: [] }, parameter);
-					parameters.push(byName[parameter.name]);
+				var merged = byName[parameter.name];
+				if (!merged) {
+					merged = byName[parameter.name] = lang.mixin({ sources: [] }, parameter);
+					parameters.push(merged);
+				} else if (parameter.order !== undefined && (merged.order === undefined || parameter.order < merged.order)) {
+					merged.order = parameter.order;
 				}
 				if (parameter.className && parameter.property) {
-					byName[parameter.name].sources.push({ className: parameter.className, property: parameter.property });
+					merged.sources.push({ className: parameter.className, property: parameter.property });
 				}
 			});
 		});
-		return parameters;
+		return QuerySerializer.sortParameters(parameters);
 	}
 
 	// Opciones de una lista de opciones de P8 ({ displayName, value }); las de un grupo anidado van con su ruta.

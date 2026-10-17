@@ -284,6 +284,10 @@
 	border-bottom: 1px solid #f4f4f4;
 }
 
+.dqParametersDialog .dqParametersOrder {
+	width: 5em;
+}
+
 .dqParametersDialog .dqParametersNote {
 	margin-top: 2px;
 	color: #6f6f6f;

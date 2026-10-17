@@ -101,8 +101,32 @@ function(array, SearchTemplate) {
 		});
 	}
 
+	// Orden de los campos de los comodines al ejecutar: los que tienen orden primero (de menor a mayor) y el resto en el
+	// orden en que aparecen. Estable aunque Array.sort no lo sea.
+	function sortByOrder(parameters) {
+		var indexed = array.map(parameters, function(parameter, index) {
+			return { parameter: parameter, index: index };
+		});
+		indexed.sort(function(a, b) {
+			var orderA = a.parameter.order, orderB = b.parameter.order;
+			if (orderA !== orderB) {
+				if (orderA === undefined) {
+					return 1;
+				}
+				if (orderB === undefined) {
+					return -1;
+				}
+				return orderA - orderB;
+			}
+			return a.index - b.index;
+		});
+		return array.map(indexed, function(entry) {
+			return entry.parameter;
+		});
+	}
+
 	// Convierte un ecm.model.SearchCriterion o un ecm.model.SearchCriteria (grupo). Devuelve null si la fila quedó
-	// vacía: ICN también ignora esas filas al buscar. context: { parameters: { clave: nombre }, seen: {} }.
+	// vacía: ICN también ignora esas filas al buscar. context: { parameters: { clave: { name, order } }, seen: {} }.
 	function convertNode(node, errors, context) {
 		if (node.criteria) {
 			var children = array.filter(array.map(node.criteria, function(child) {
@@ -146,7 +170,8 @@ function(array, SearchTemplate) {
 			operator: operator,
 			values: values
 		};
-		var parameter = context.parameters[conditionKey(node.id, context.seen)];
+		var wildcard = context.parameters[conditionKey(node.id, context.seen)];
+		var parameter = wildcard && wildcard.name;
 		if (parameter) {
 			if (!PARAMETER_OPERATORS[operator] || !PARAMETER_DATA_TYPES[dataType]) {
 				errors.push("“" + label + "”: el comodín #" + parameter + " no admite este operador o tipo de dato; use una " +
@@ -157,6 +182,12 @@ function(array, SearchTemplate) {
 			}
 			condition.label = node.name;
 			condition.parameter = parameter;
+			if (wildcard.order !== undefined && wildcard.order !== null) {
+				if (!(wildcard.order >= 1 && wildcard.order % 1 === 0)) {
+					errors.push("“" + label + "”: el orden del comodín #" + parameter + " debe ser un entero mayor que 0.");
+				}
+				condition.parameterOrder = wildcard.order;
+			}
 		} else if (context.keepLabels) {
 			condition.label = node.name;
 		}
@@ -394,7 +425,7 @@ function(array, SearchTemplate) {
 		 *   matchAll: boolean,                          // SearchPropertyOptions: coincidencia total
 		 *   criteria: Array,                            // AttributeDefinitionsForm.createSearchCriteriaFromAttributeDefintions()
 		 *   resultsDisplay: { columns, sortBy, sortAsc },
-		 *   parameters: { clave: nombre },              // comodines (ver getConditions); opcional
+		 *   parameters: { clave: { name, order } },     // comodines (ver getConditions/getWildcards); opcional
 		 *   keepLabels: boolean                         // label en todas las condiciones (no para guardar); opcional
 		 * }
 		 * @return { definition: Object, errors: String[] } — errors vacío si la definición es válida.
@@ -475,6 +506,31 @@ function(array, SearchTemplate) {
 			return conditions;
 		},
 
+		/**
+		 * Comodines de una definición con la forma que reciben build y serialize: { clave: { name, order } } (order solo si
+		 * la condición lo tiene). Al reabrir una consulta guardada.
+		 */
+		getWildcards: function(definition) {
+			var wildcards = {};
+			array.forEach(this.getConditions(definition), function(entry) {
+				if (entry.condition.parameter) {
+					wildcards[entry.key] = { name: entry.condition.parameter };
+					if (entry.condition.parameterOrder !== undefined) {
+						wildcards[entry.key].order = entry.condition.parameterOrder;
+					}
+				}
+			});
+			return wildcards;
+		},
+
+		/**
+		 * Copia de una lista de comodines ({ order, … }) ordenada para mostrar sus campos: por order de menor a mayor y
+		 * los que no lo tienen al final, conservando su posición relativa.
+		 */
+		sortParameters: function(parameters) {
+			return sortByOrder(parameters);
+		},
+
 		/** true si la condición (del contrato) puede ser un comodín. */
 		canBeParameter: function(condition) {
 			return !!(PARAMETER_OPERATORS[condition.operator] && PARAMETER_DATA_TYPES[condition.dataType]);
@@ -482,7 +538,8 @@ function(array, SearchTemplate) {
 
 		/**
 		 * Comodines de una definición, que quien ejecuta la consulta debe pedir y reemplazar en el CE SQL (#name):
-		 * [ { name, property, label, dataType, operator, sample } ]; sample es el valor de ejemplo del diseñador.
+		 * [ { name, property, label, dataType, operator, sample, order } ]; sample es el valor de ejemplo del diseñador y
+		 * order (opcional) la posición de su campo al ejecutar. Ordenados por order; sin él, en el orden de las condiciones.
 		 */
 		getParameters: function(definition) {
 			var parameters = [];
@@ -496,9 +553,12 @@ function(array, SearchTemplate) {
 						operator: condition.operator,
 						sample: condition.values[0]
 					});
+					if (condition.parameterOrder !== undefined) {
+						parameters[parameters.length - 1].order = condition.parameterOrder;
+					}
 				}
 			}, {});
-			return parameters;
+			return sortByOrder(parameters);
 		},
 
 		/**
@@ -523,7 +583,7 @@ function(array, SearchTemplate) {
 
 		/**
 		 * Comodines de una consulta guardada ({ cesql, config }), en orden y sin repetir:
-		 * [ { name, label, dataType, className, property } ]. Con una definición en config son los de getParameters,
+		 * [ { name, label, dataType, className, property, order } ]. Con una definición en config son los de getParameters,
 		 * con la clase de documento y la propiedad de su condición (para buscar su lista de opciones); si config no es
 		 * una definición (consulta creada fuera del plug-in), los #Nombre del CE SQL, como texto si van entre comillas,
 		 * sin clase ni propiedad.
@@ -548,6 +608,9 @@ function(array, SearchTemplate) {
 							className: definition.documentClass && definition.documentClass.symbolicName,
 							property: parameter.property
 						});
+						if (parameter.order !== undefined) {
+							parameters[parameters.length - 1].order = parameter.order;
+						}
 					}
 				});
 				return parameters;
@@ -643,7 +706,7 @@ function(array, SearchTemplate) {
 
 		/**
 		 * Lee el formulario del constructor de ICN (BasicSearchDefinition) sin ejecutar la búsqueda y arma la
-		 * definición, con los comodines indicados ({ clave: nombre }, ver getConditions). Sin la visualización de
+		 * definición, con los comodines indicados ({ clave: { name, order } }, ver getConditions). Sin la visualización de
 		 * resultados: DQ la oculta (siempre es la predeterminada de la clase). keepLabels agrega el nombre visible a
 		 * todas las condiciones, para mostrarlas (no para guardar). Los valores de las filas no se copian al SearchTemplate hasta buscar, por eso se leen de los
 		 * widgets.
