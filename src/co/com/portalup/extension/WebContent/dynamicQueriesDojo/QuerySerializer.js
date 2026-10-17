@@ -291,6 +291,45 @@ function(array, SearchTemplate) {
 		throw new Error("Operador no soportado en CE SQL: " + node.operator);
 	}
 
+	// Recorre los marcadores #Nombre de un CE SQL: fn(name, start, end, quoted), quoted si está dentro de un literal de
+	// texto ('…', donde '' es una comilla escapada y no cierra el literal).
+	function forEachSqlParameter(cesql, fn) {
+		var quoted = false;
+		for (var i = 0; i < cesql.length; i++) {
+			var c = cesql.charAt(i);
+			if (c === "'") {
+				quoted = !quoted;
+			} else if (c === "#") {
+				var match = /^[A-Za-z][A-Za-z0-9_]*/.exec(cesql.substring(i + 1));
+				if (match) {
+					fn(match[0], i, i + 1 + match[0].length, quoted);
+					i += match[0].length;
+				}
+			}
+		}
+	}
+
+	// Literal de CE SQL del valor de un comodín. Dentro de un literal de texto solo se escapan las comillas; fuera, el
+	// literal del tipo (sin tipo conocido, solo se acepta un número).
+	function sqlParameterValue(name, value, dataType, quoted) {
+		if (value === undefined || value === null || (typeof value === "string" && value.trim() === "")) {
+			throw new Error("Falta el valor de #" + name + ".");
+		}
+		if (quoted) {
+			return String(value).replace(/'/g, "''");
+		}
+		if (dataType === "INTEGER" || dataType === "FLOAT") {
+			return sqlLiteral(typeof value === "number" ? value : Number(String(value).trim()), dataType);
+		}
+		if (dataType && dataType !== "STRING") {
+			return sqlLiteral(value, dataType);
+		}
+		if (!/^-?\d+(\.\d+)?$/.test(String(value).trim())) {
+			throw new Error("El valor de #" + name + " debe ser un número.");
+		}
+		return String(value).trim();
+	}
+
 	function sqlCriteria(nodes, match) {
 		var parts = array.map(nodes, function(node) {
 			return node.type === "group" ? "(" + sqlCriteria(node.criteria, node.match) + ")" : sqlCondition(node);
@@ -480,6 +519,69 @@ function(array, SearchTemplate) {
 		fromGroupingConfig: function(config) {
 			var match = /vnRoot\s*:\s*"([^"]*)"/.exec(config || "");
 			return match ? match[1] : config || "";
+		},
+
+		/**
+		 * Comodines de una consulta guardada ({ cesql, config }), en orden y sin repetir:
+		 * [ { name, label, dataType, className, property } ]. Con una definición en config son los de getParameters,
+		 * con la clase de documento y la propiedad de su condición (para buscar su lista de opciones); si config no es
+		 * una definición (consulta creada fuera del plug-in), los #Nombre del CE SQL, como texto si van entre comillas,
+		 * sin clase ni propiedad.
+		 */
+		getQueryParameters: function(query) {
+			var definition = null;
+			try {
+				definition = JSON.parse(query.config || "");
+			} catch (e) {
+				definition = null;
+			}
+			var parameters = [];
+			var seen = {};
+			if (definition && definition.criteria) {
+				array.forEach(this.getParameters(definition), function(parameter) {
+					if (!seen[parameter.name]) {
+						seen[parameter.name] = true;
+						parameters.push({
+							name: parameter.name,
+							label: parameter.label,
+							dataType: parameter.dataType,
+							className: definition.documentClass && definition.documentClass.symbolicName,
+							property: parameter.property
+						});
+					}
+				});
+				return parameters;
+			}
+			forEachSqlParameter(query.cesql || "", function(name, start, end, quoted) {
+				if (!seen[name]) {
+					seen[name] = true;
+					parameters.push({ name: name, label: name, dataType: quoted ? "STRING" : null });
+				}
+			});
+			return parameters;
+		},
+
+		/**
+		 * Reemplaza en el CE SQL los comodines por sus valores ({ name: value }), como lo hace la consulta general con
+		 * CG_CFG_QUERY pero escapando: dentro de '…' se duplican las comillas; fuera, el literal de CE SQL del tipo
+		 * (fecha en UTC, TRUE/FALSE, GUID entre llaves). parameters es el de getQueryParameters: los #Nombre que no
+		 * están en él se dejan como están. Lanza un Error si falta un valor o no es válido para su tipo.
+		 */
+		fillParameters: function(cesql, parameters, values) {
+			var types = {};
+			array.forEach(parameters, function(parameter) {
+				types[parameter.name] = parameter.dataType || "";
+			});
+			var result = "";
+			var last = 0;
+			forEachSqlParameter(cesql, function(name, start, end, quoted) {
+				if (!types.hasOwnProperty(name)) {
+					return;
+				}
+				result += cesql.substring(last, start) + sqlParameterValue(name, values[name], types[name], quoted);
+				last = end;
+			});
+			return result + cesql.substring(last);
 		},
 
 		/**

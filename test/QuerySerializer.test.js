@@ -217,4 +217,25 @@ st.keepLabels = true;
 assert.deepStrictEqual(S.build(st).definition.criteria.map(x => x.label), ["Numero de Identificacion", "Tipo de Identificacion", "Alcance", "Linea de Producto"]);
 st.keepLabels = false;
 assert.deepStrictEqual(S.build(st).definition.criteria.map(x => x.label), ["Numero de Identificacion", "Tipo de Identificacion", undefined, undefined]);
-console.log("OK: 16 casos (config del ejemplo: " + size + " caracteres)");
+// 17. Ejecutar (Resultados de consultas): comodines de la consulta guardada y CE SQL con los valores escapados
+const saved = { cesql: S.toCeSql(r.definition), config: JSON.stringify(r.definition) };
+const params = S.getQueryParameters(saved);
+assert.deepStrictEqual(params, [
+  { name: "NroIdentificacion", label: "Numero de Identificacion", dataType: "STRING", className: "Afiliaciones", property: "NroIdentificacion" },
+  { name: "TipoIdentificacion", label: "Tipo de Identificacion", dataType: "STRING", className: "Afiliaciones", property: "TipoIdentificacion" }
+]);
+assert.strictEqual(S.fillParameters(saved.cesql, params, { NroIdentificacion: "71'234", TipoIdentificacion: "CC" }),
+  "SELECT d.[Id], d.[DocumentTitle] FROM [Afiliaciones] d WITH EXCLUDESUBCLASSES WHERE d.[NroIdentificacion] = '71''234'" +
+  " AND d.[TipoIdentificacion] = 'CC' AND d.[Alcance] = 'A' AND d.[LineaProducto] = 'V' AND d.[VersionStatus] = 1");
+assert.throws(() => S.fillParameters(saved.cesql, params, { NroIdentificacion: " ", TipoIdentificacion: "CC" }), /Falta el valor de #NroIdentificacion/);
+// 18. Consulta creada fuera del plug-in (config no es una definición): los #Nombre del CE SQL; un nombre que es prefijo
+// de otro no lo pisa; fuera de comillas, número; en LIKE y con tipo (fecha) desde la definición
+const external = { cesql: "SELECT Id FROM Doc WHERE Nro = '#Nro' AND NroLargo LIKE '%#NroLargo%' AND Anio = #Anio", config: "{ vnRoot: \"A\" }" };
+const extParams = S.getQueryParameters(external);
+assert.deepStrictEqual(extParams.map(x => [x.name, x.dataType]), [["Nro", "STRING"], ["NroLargo", "STRING"], ["Anio", null]]);
+assert.strictEqual(S.fillParameters(external.cesql, extParams, { Nro: "1", NroLargo: "2", Anio: "2026" }),
+  "SELECT Id FROM Doc WHERE Nro = '1' AND NroLargo LIKE '%2%' AND Anio = 2026");
+assert.throws(() => S.fillParameters(external.cesql, extParams, { Nro: "1", NroLargo: "2", Anio: "1 OR 1=1" }), /debe ser un número/);
+assert.strictEqual(S.fillParameters("WHERE d.[F] >= #Desde", [{ name: "Desde", dataType: "DATETIME" }], { Desde: "2026-03-15T00:00:00.000-05:00" }),
+  "WHERE d.[F] >= 20260315T050000Z");
+console.log("OK: 18 casos (config del ejemplo: " + size + " caracteres)");
