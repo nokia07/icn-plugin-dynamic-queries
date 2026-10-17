@@ -506,6 +506,11 @@
 	height: auto;
 }
 
+.dqResultsPane .dqResultsViewerMessage {
+	padding: 16px;
+	color: #525252;
+}
+
 /* Overlay de carga */
 .dqResultsPane .dqResultsLoading {
 	display: none;

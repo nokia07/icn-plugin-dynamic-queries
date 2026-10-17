@@ -45,5 +45,30 @@
 					nombre o DN). Solo sus miembros pueden abrir el feature.</div>
 			</td>
 		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_s3DownloadUrl">URL de descarga de documentos en S3:</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_s3DownloadUrl" data-dojo-attach-point="s3DownloadUrlField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="required:false, trim:true, propercase:false, maxLength:512, regExp:'(https?://\\S+)?', invalidMessage:'Ingrese una URL que empiece por http:// o https://', placeHolder:'https://servidor/gce-alm/documentos/s3descarga'"></div>
+				<div class="dqConfigHint">Servicio que entrega en base64 el contenido de los documentos con las propiedades
+					file_key y storage_name (en Resultados de consultas). Lo llama el servidor de ICN con
+					?storage_name=…&amp;file_key=…; vacío: esos documentos no se pueden ver.</div>
+			</td>
+		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_s3ApiKey">API key de la descarga (x-api-key):</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_s3ApiKey" data-dojo-attach-point="s3ApiKeyField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="type:'password', required:false, trim:true, propercase:false, maxLength:512"></div>
+			</td>
+		</tr>
 	</table>
 </div>

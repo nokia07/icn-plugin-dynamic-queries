@@ -72,6 +72,11 @@ public class ExecuteQueriesService extends PluginService {
 			result = failure(500, "INTERNAL_ERROR",
 					"Error inesperado al ejecutar las consultas (" + t.getClass().getName() + ": " + t.getMessage() + ").");
 		}
+		write(response, result);
+	}
+
+	/** Escribe la respuesta JSON del servicio (también la usa DocumentPropertiesService). */
+	static void write(HttpServletResponse response, JSONObject result) throws IOException {
 		response.setContentType("application/json");
 		response.setCharacterEncoding("UTF-8");
 		PrintWriter writer = response.getWriter();
@@ -192,7 +197,7 @@ public class ExecuteQueriesService extends PluginService {
 	 * Cuerpo del POST de ecm.model.Request.postPluginService. ICN puede haberlo leído antes (atributo o parámetro
 	 * json_post); si no, se lee del request.
 	 */
-	private static String readBody(HttpServletRequest request) throws IOException {
+	static String readBody(HttpServletRequest request) throws IOException {
 		Object posted = request.getAttribute("json_post");
 		if (posted == null) {
 			posted = request.getParameter("json_post");
@@ -221,7 +226,7 @@ public class ExecuteQueriesService extends PluginService {
 		return failure;
 	}
 
-	private static JSONObject failure(int status, String code, String message) {
+	static JSONObject failure(int status, String code, String message) {
 		JSONObject error = new JSONObject();
 		error.put("status", (long) status);
 		error.put("code", code);

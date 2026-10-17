@@ -43,7 +43,8 @@ public class DynamicQueries extends Plugin {
 	private PluginOpenAction[]  pluginOpenActions = new PluginOpenAction[0];
 	private PluginRequestFilter[] pluginRequestFilters = new PluginRequestFilter[0];
 	private PluginResponseFilter[] pluginResponseFilters = new PluginResponseFilter[0];
-	private PluginService[] pluginServices = new PluginService[] { new SettingsService(), new ExecuteQueriesService() };
+	private PluginService[] pluginServices = new PluginService[] { new SettingsService(), new ExecuteQueriesService(),
+			new DocumentPropertiesService() };
 	private PluginODAuthenticationService odAuthenticationService = null;
 	private PluginViewerDef[] pluginViewerDefs = new PluginViewerDef[0];
 	private PluginLayout[] pluginLayouts = new PluginLayout[0];

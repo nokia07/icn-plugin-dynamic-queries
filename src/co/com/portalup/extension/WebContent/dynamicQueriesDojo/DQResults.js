@@ -10,7 +10,6 @@ define([
 	"dojo/json",
 	"dojo/keys",
 	"dojo/on",
-	"dojo/request/xhr",
 	"dojo/store/Memory",
 	"dojo/data/ObjectStore",
 	"dijit/tree/ObjectStoreModel",
@@ -24,6 +23,7 @@ define([
 	"ecm/widget/dialog/MessageDialog",
 	"ecm/widget/layout/_LaunchBarPane",
 	"dynamicQueriesDojo/DqApiClient",
+	"dynamicQueriesDojo/DocumentPropertiesClient",
 	"dynamicQueriesDojo/ExecuteQueriesClient",
 	"dynamicQueriesDojo/QuerySerializer",
 	"dynamicQueriesDojo/SettingsClient",
@@ -46,7 +46,6 @@ function(declare,
 		JSON,
 		keys,
 		on,
-		xhr,
 		Memory,
 		ObjectStore,
 		ObjectStoreModel,
@@ -60,18 +59,14 @@ function(declare,
 		MessageDialog,
 		_LaunchBarPane,
 		DqApiClient,
+		DocumentPropertiesClient,
 		ExecuteQueriesClient,
 		QuerySerializer,
 		SettingsClient,
 		template) {
 
-	// Backend de GQViewFeature (aplicación portalUpApp, en el mismo servidor que ICN); ahora solo para las propiedades
-	// y el contenido de S3 del documento elegido.
-	var API_CONTEXT = "/portalUpApp";
 	// Escritorio de ICN con el que bookmark.jsp muestra los documentos que no vienen de S3.
 	var VIEWER_DESKTOP = "LPADocViewer";
-	// Propiedad cuyo valor es el contenido del documento en base64 (documentos en S3).
-	var S3_FILE = "s3file";
 	// Cada cuánto se revisa la sesión de ICN (ver _checkSession).
 	var SESSION_CHECK_MS = 500;
 	// Espera máxima por las definiciones de atributos de una clase: si la clase no existe, ICN 3.0.10 no llama ni al
@@ -155,8 +150,9 @@ function(declare,
 	 * @class Feature pane "Resultados de consultas": ejecuta las consultas de un proyecto del microservicio de DQ. El
 	 *        usuario elige un proyecto (activo y con consultas activas), llena los comodines de sus consultas y Buscar
 	 *        las ejecuta (ExecuteQueriesService, con su sesión de P8) y muestra los documentos agrupados en carpetas
-	 *        como la consulta general; al elegir uno, sus propiedades y el documento. El árbol, las propiedades y el
-	 *        visor vienen de GQViewFeature (PortalUpICN).
+	 *        como la consulta general; al elegir uno, sus propiedades y el documento (DocumentPropertiesService, que
+	 *        trae de S3 el contenido de los documentos con file_key y storage_name). El árbol y el visor vienen de
+	 *        GQViewFeature (PortalUpICN).
 	 * @augments ecm.widget.layout._LaunchBarPane
 	 */
 	return declare("dynamicQueriesDojo.DQResults", [
@@ -650,8 +646,9 @@ function(declare,
 		},
 
 		/**
-		 * Propiedades del documento en el grid y el documento en el visor: con bookmark.jsp de ICN o, si las
-		 * propiedades traen el contenido (S3_FILE), decodificado en el navegador.
+		 * Propiedades del documento en el grid y el documento en el visor: con bookmark.jsp de ICN o, si está en S3
+		 * (file_key y storage_name), su contenido en base64 decodificado en el navegador (DocumentPropertiesService lo
+		 * descarga, como /portalUpApp/api/documents/properties de la consulta general).
 		 */
 		getDocumentProperties: function(doc) {
 			if (!doc || !doc.objectStoreName || !doc.objId) {
@@ -659,41 +656,45 @@ function(declare,
 				return;
 			}
 			this._showLoading(true);
-			var payload = {
-				objectstore: doc.objectStoreName,
-				documentId: doc.objId
-			};
-			xhr.post(API_CONTEXT + "/api/documents/properties", {
-				data: JSON.stringify(payload),
-				handleAs: "json",
-				headers: { "Content-Type": "application/json" }
-			}).then(lang.hitch(this, function(response) {
-				var gridData = [];
-				var s3FileKey = null;
-				var idCounter = 1;
-				for (var key in response) {
-					if (!response.hasOwnProperty(key)) {
-						continue;
-					}
-					if (key.toLowerCase() === S3_FILE) {
-						s3FileKey = key;
-					} else {
-						gridData.push({ id: idCounter++, key: key, value: response[key] || "" });
-					}
+			// Si el usuario elige otro documento antes de que llegue la respuesta, solo vale el último.
+			var request = this._documentRequest = (this._documentRequest || 0) + 1;
+			DocumentPropertiesClient.getProperties(doc.objId).then(lang.hitch(this, function(data) {
+				if (request !== this._documentRequest) {
+					return;
 				}
-				this._loadGridData(gridData);
-				if (s3FileKey === null) {
+				var title = null;
+				this._loadGridData(array.map(data.properties || [], function(property, i) {
+					if (property.name === "DocumentTitle") {
+						title = property.value;
+					}
+					return { id: i + 1, key: property.label || property.name, value: property.value || "" };
+				}));
+				if (!data.s3) {
 					this._showIcnViewer(doc);
+				} else if (data.file) {
+					try {
+						this.showViewerBase64(data.file, data.mimeType || this.getMimeType(title) || "application/pdf");
+					} catch (e) {
+						console.error("DQResults: no se pudo mostrar el contenido de S3", e);
+						this._showViewerMessage("No se pudo mostrar el documento: " + e.message);
+					}
 				} else {
-					var mimeType = response.MimeType || this.getMimeType(response.DocumentTitle) || "application/pdf";
-					this.showViewerBase64(response[s3FileKey], mimeType);
+					this._showViewerMessage(data.fileError || "El contenido del documento no está disponible.");
 				}
 				this._showLoading(false);
 			}), lang.hitch(this, function(error) {
+				if (request !== this._documentRequest) {
+					return;
+				}
 				this._showLoading(false);
 				console.error("DQResults: error consultando propiedades", error);
-				this._showAlert("No se pudieron consultar las propiedades del documento.");
+				this._showAlert("No se pudieron consultar las propiedades del documento: " + error.message);
 			}));
+		},
+
+		_showViewerMessage: function(message) {
+			this._clearViewer();
+			domConstruct.create("div", { "class": "dqResultsViewerMessage", textContent: message }, this.viewerNode);
 		},
 
 		_showIcnViewer: function(doc) {
