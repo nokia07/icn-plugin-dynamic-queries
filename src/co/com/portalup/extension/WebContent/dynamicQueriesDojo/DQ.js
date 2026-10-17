@@ -282,10 +282,17 @@ function(declare,
 					this._showError(e.message);
 					return;
 				}
+				var parameters = {};
+				array.forEach(QuerySerializer.getConditions(definition), function(entry) {
+					if (entry.condition.parameter) {
+						parameters[entry.key] = entry.condition.parameter;
+					}
+				});
 				this.openQueryTab(repository, searchTemplate, {
 					savedQuery: query,
 					initialResultsDisplay: searchTemplate.resultsDisplay,
-					runOnOpen: !!run
+					runOnOpen: !!run,
+					parameters: parameters
 				});
 			}), lang.hitch(this, function(error) {
 				this._showError(error.message);
@@ -302,7 +309,7 @@ function(declare,
 
 		/**
 		 * Abre una pestaña de consulta. Sin searchTemplate, el constructor crea una búsqueda nueva sobre el repositorio.
-		 * options: { savedQuery, initialResultsDisplay, runOnOpen } (ver QueryTab).
+		 * options: { savedQuery, initialResultsDisplay, runOnOpen, parameters } (ver QueryTab).
 		 */
 		openQueryTab: function(repository, searchTemplate, options) {
 			options = options || {};

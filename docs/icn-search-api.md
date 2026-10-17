@@ -136,6 +136,18 @@ Formato de la respuesta que acepta `_applyRetrievedSearchCriteria`:
 ```
 
 - `isNew()` es verdadero si el id está vacío o empieza por `NewSearch_`; con ese id ICN la trata como búsqueda nueva.
+  Con otro id ICN la trata como guardada en P8: hace `p8/lock` y `p8/openSearchTemplate` y falla ("El documento no se
+  puede actualizar").
+- **ICN ignora la clase de una búsqueda nueva**: `BasicSearchDefinition._initContentClassSelector` pone
+  `contentClassSelector.defaultToFirstItem` si `searchTemplate.isNew()` y llama a
+  `_setSelectedContentClass(isNew() ? null : getSearchContentClass())`, así que selecciona la primera clase del árbol
+  (`Document`) aunque mantiene las condiciones. Seleccionar la clase después (`_setSelectedContentClass`) rehace el
+  formulario y borra las condiciones. `QueryTab` hace que la plantilla responda `isNew() === false` solo durante
+  `_initContentClassSelector` (marca `dqRestoreClass` de `QuerySerializer.toSearchTemplate`): ICN selecciona su clase y
+  dibuja las condiciones, y no consulta P8.
+- Al restaurar la clase queda marcado "Incluir subclases": `contentClassSelector.setIncludeSubclasses(false)` no rehace el
+  formulario, pero la etiqueta ("Clase (Incluye subclases)") se actualiza con
+  `contentClassSelector._setSelectedItemLabel(getSelected())`.
 - `pathName` es la ruta de P8 (`/` es la raíz; `ContentItem.attributes.PathName`), no la que se muestra
   (`\Proteccion\Carga CRM`).
 - El constructor **reemplaza la visualización de resultados** por la predeterminada al cargar la clase:

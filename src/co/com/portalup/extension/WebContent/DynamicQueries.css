@@ -259,6 +259,37 @@
 	min-width: 240px;
 }
 
+/* "Comodines" (ParametersDialog) */
+.dqParametersDialog .dqParametersIntro {
+	max-width: 560px;
+	margin: 0 0 12px;
+	color: #525252;
+}
+
+.dqParametersDialog .dqParametersTable {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+.dqParametersDialog .dqParametersTable th {
+	padding: 6px 8px;
+	text-align: left;
+	font-weight: 600;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.dqParametersDialog .dqParametersTable td {
+	padding: 6px 8px;
+	vertical-align: middle;
+	border-bottom: 1px solid #f4f4f4;
+}
+
+.dqParametersDialog .dqParametersNote {
+	margin-top: 2px;
+	color: #6f6f6f;
+	font-size: 12px;
+}
+
 /* ==== Feature DQResults ("Resultados de consultas", copia de GQViewFeature): todo bajo .dqResultsPane ==== */
 
 .DQResultsLaunchIcon {
