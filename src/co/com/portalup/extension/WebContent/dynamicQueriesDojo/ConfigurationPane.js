@@ -13,8 +13,8 @@ define([
 
 		/**
 		 * @name dynamicQueriesDojo.ConfigurationPane
-		 * @class Configuración del plug-in: repositorio de las consultas, URL del microservicio de DQ y grupos con acceso
-		 *        al diseñador.
+		 * @class Configuración del plug-in: repositorio de las consultas, URL del microservicio de DQ, grupos con acceso
+		 *        al diseñador y servicio de descarga de los documentos en S3 (URL y API key).
 		 *        La lee co.com.portalup.extension.PluginConfiguration en el servidor; los nombres deben coincidir.
 		 * @augments ecm.widget.admin.PluginConfigurationPane
 		 */
@@ -39,6 +39,8 @@ define([
 			this.projectsApiUrlField.set("value",
 				"projectsApiUrl" in values ? values.projectsApiUrl || "" : this.defaultProjectsApiUrl, false);
 			this.designerGroupsField.set("value", values.designerGroups || "", false);
+			this.s3DownloadUrlField.set("value", values.s3DownloadUrl || "", false);
+			this.s3ApiKeyField.set("value", values.s3ApiKey || "", false);
 		},
 
 		// Repositorios P8 configurados en ICN (no solo los de un escritorio): el plug-in es global.
@@ -67,14 +69,16 @@ define([
 				configuration: [
 					{ name: "repositoryId", value: this.repositoryIdField.get("value") },
 					{ name: "projectsApiUrl", value: this.projectsApiUrlField.get("value") },
-					{ name: "designerGroups", value: this.designerGroupsField.get("value") }
+					{ name: "designerGroups", value: this.designerGroupsField.get("value") },
+					{ name: "s3DownloadUrl", value: this.s3DownloadUrlField.get("value") },
+					{ name: "s3ApiKey", value: this.s3ApiKeyField.get("value") }
 				]
 			});
 			this.onSaveNeeded(true);
 		},
 
 		validate: function() {
-			return !!this.repositoryIdField.get("value") && this.projectsApiUrlField.isValid();
+			return !!this.repositoryIdField.get("value") && this.projectsApiUrlField.isValid() && this.s3DownloadUrlField.isValid();
 		}
 	});
 });

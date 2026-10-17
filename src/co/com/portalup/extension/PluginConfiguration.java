@@ -30,6 +30,14 @@ public final class PluginConfiguration {
 	 * todos los usuarios. Se comparan sin distinguir mayúsculas con el nombre corto, el nombre y el DN de los grupos.
 	 */
 	public static final String DESIGNER_GROUPS = "designerGroups";
+	/**
+	 * URL del servicio que entrega en base64 el contenido de los documentos en S3 (propiedades file_key y storage_name),
+	 * el de S3Service de la consulta general: {client.s3.host}/gce-alm/documentos/s3descarga. La llama el servidor de ICN
+	 * (DocumentPropertiesService), no el navegador. Vacía: los documentos en S3 no se pueden ver.
+	 */
+	public static final String S3_DOWNLOAD_URL = "s3DownloadUrl";
+	/** Valor de la cabecera x-api-key para S3_DOWNLOAD_URL. Nunca se envía al navegador (salvo a la herramienta de administración). */
+	public static final String S3_API_KEY = "s3ApiKey";
 
 	private PluginConfiguration() {
 	}

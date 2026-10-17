@@ -129,8 +129,8 @@ function(declare, lang, array, aspect, domClass, domConstruct, Dialog, Button, S
 		// true para ejecutar la búsqueda apenas el formulario termine de cargar ("Ejecutar" desde el árbol).
 		runOnOpen: false,
 
-		// Comodines de la consulta: { clave: nombre } (claves de QuerySerializer.getConditions). Al abrir una consulta
-		// guardada vienen de su definición.
+		// Comodines de la consulta: { clave: { name, order } } (claves de QuerySerializer.getConditions; order es la
+		// posición de su campo en "Resultados de consultas"). Al abrir una consulta guardada vienen de su definición.
 		parameters: null,
 
 		postCreate: function() {

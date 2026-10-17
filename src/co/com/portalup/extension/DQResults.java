@@ -5,9 +5,9 @@ import java.util.Locale;
 import com.ibm.ecm.extension.PluginFeature;
 
 /**
- * Feature "Resultados de consultas" (dynamicQueriesDojo.DQResults): copia de GQViewFeature del plug-in PortalUpICN
- * (búsqueda, árbol de documentos, propiedades y visor) que sirve de base para mostrar los resultados de las consultas
- * del diseñador. Por ahora usa el mismo backend que GQViewFeature.
+ * Feature "Resultados de consultas" (dynamicQueriesDojo.DQResults): el usuario elige un proyecto del microservicio de DQ,
+ * llena los comodines de sus consultas y las ejecuta (ExecuteQueriesService); los documentos se muestran agrupados en
+ * carpetas como en la consulta general, con sus propiedades y el visor de GQViewFeature (PortalUpICN).
  */
 public class DQResults extends PluginFeature {
 

@@ -2,49 +2,76 @@ define([
 	"dojo/_base/declare",
 	"dojo/_base/lang",
 	"dojo/_base/array",
+	"dojo/Deferred",
+	"dojo/promise/all",
+	"dojo/when",
 	"dojo/dom-class",
 	"dojo/dom-construct",
 	"dojo/json",
-	"dojo/request/xhr",
+	"dojo/keys",
+	"dojo/on",
 	"dojo/store/Memory",
 	"dojo/data/ObjectStore",
 	"dijit/tree/ObjectStoreModel",
 	"dijit/Tree",
 	"dojox/grid/DataGrid",
+	"dijit/form/Select",
+	"dijit/form/ValidationTextBox",
+	"dijit/form/NumberTextBox",
+	"dijit/form/DateTextBox",
+	"ecm/model/Desktop",
 	"ecm/widget/dialog/MessageDialog",
 	"ecm/widget/layout/_LaunchBarPane",
+	"dynamicQueriesDojo/DqApiClient",
+	"dynamicQueriesDojo/DocumentPropertiesClient",
+	"dynamicQueriesDojo/ExecuteQueriesClient",
+	"dynamicQueriesDojo/QuerySerializer",
+	"dynamicQueriesDojo/SettingsClient",
 	"dojo/text!./templates/DQResults.html",
 	// Script sin AMD: define window.UTIF (decodificador de TIFF).
 	"dynamicQueriesDojo/UTIF",
 	"idx/layout/BorderContainer",
 	"dijit/layout/BorderContainer",
 	"dijit/layout/ContentPane",
-	"dijit/form/Select",
-	"dijit/form/TextBox",
 	"dijit/form/Button"
 ],
 function(declare,
 		lang,
 		array,
+		Deferred,
+		all,
+		when,
 		domClass,
 		domConstruct,
 		JSON,
-		xhr,
+		keys,
+		on,
 		Memory,
 		ObjectStore,
 		ObjectStoreModel,
 		Tree,
 		DataGrid,
+		Select,
+		ValidationTextBox,
+		NumberTextBox,
+		DateTextBox,
+		Desktop,
 		MessageDialog,
 		_LaunchBarPane,
+		DqApiClient,
+		DocumentPropertiesClient,
+		ExecuteQueriesClient,
+		QuerySerializer,
+		SettingsClient,
 		template) {
 
-	// Backend de GQViewFeature (aplicación portalUpApp, en el mismo servidor que ICN).
-	var API_CONTEXT = "/portalUpApp";
 	// Escritorio de ICN con el que bookmark.jsp muestra los documentos que no vienen de S3.
 	var VIEWER_DESKTOP = "LPADocViewer";
-	// Propiedad cuyo valor es el contenido del documento en base64 (documentos en S3).
-	var S3_FILE = "s3file";
+	// Cada cuánto se revisa la sesión de ICN (ver _checkSession).
+	var SESSION_CHECK_MS = 500;
+	// Espera máxima por las definiciones de atributos de una clase: si la clase no existe, ICN 3.0.10 no llama ni al
+	// callback ni al de error de retrieveAttributeDefinitions.
+	var ATTRIBUTES_TIMEOUT_MS = 10000;
 
 	var MIME_TYPES = {
 		pdf: "application/pdf",
@@ -64,6 +91,51 @@ function(declare,
 		xml: "application/xml"
 	};
 
+	function isActive(item) {
+		return item.status !== "INACTIVE";
+	}
+
+	function byName(a, b) {
+		return String(a.name).localeCompare(String(b.name));
+	}
+
+	// Comodines de las consultas de un proyecto, sin repetir: el mismo #Nombre en varias consultas es un solo campo
+	// (como #NroIdentificacion en las de la consulta general); el rótulo y el tipo son los de la primera. sources son
+	// las { className, property } de todas, donde se busca la lista de opciones. Ordenados por el orden que les dio el
+	// diseñador (el menor si el comodín está en varias consultas); los que no tienen, al final en el orden en que aparecen.
+	function projectParameters(queries) {
+		var parameters = [];
+		var byName = {};
+		array.forEach(queries, function(query) {
+			array.forEach(QuerySerializer.getQueryParameters(query), function(parameter) {
+				var merged = byName[parameter.name];
+				if (!merged) {
+					merged = byName[parameter.name] = lang.mixin({ sources: [] }, parameter);
+					parameters.push(merged);
+				} else if (parameter.order !== undefined && (merged.order === undefined || parameter.order < merged.order)) {
+					merged.order = parameter.order;
+				}
+				if (parameter.className && parameter.property) {
+					merged.sources.push({ className: parameter.className, property: parameter.property });
+				}
+			});
+		});
+		return QuerySerializer.sortParameters(parameters);
+	}
+
+	// Opciones de una lista de opciones de P8 ({ displayName, value }); las de un grupo anidado van con su ruta.
+	function choiceOptions(choices, prefix) {
+		var options = [];
+		array.forEach(choices || [], function(choice) {
+			if (choice.choices) {
+				options = options.concat(choiceOptions(choice.choices, (prefix || "") + choice.displayName + " / "));
+			} else {
+				options.push({ label: (prefix || "") + choice.displayName, value: String(choice.value) });
+			}
+		});
+		return options;
+	}
+
 	function base64ToBytes(base64Data) {
 		var binary = atob(base64Data);
 		var bytes = new Uint8Array(binary.length);
@@ -75,9 +147,12 @@ function(declare,
 
 	/**
 	 * @name dynamicQueriesDojo.DQResults
-	 * @class Feature pane "Resultados de consultas": copia de GQViewFeature (PortalUpICN). Busca documentos por tipo y
-	 *        número de identificación, los muestra en un árbol de carpetas y, al elegir uno, sus propiedades y el
-	 *        documento. Base para mostrar los resultados de las consultas del diseñador.
+	 * @class Feature pane "Resultados de consultas": ejecuta las consultas de un proyecto del microservicio de DQ. El
+	 *        usuario elige un proyecto (activo y con consultas activas), llena los comodines de sus consultas y Buscar
+	 *        las ejecuta (ExecuteQueriesService, con su sesión de P8) y muestra los documentos agrupados en carpetas
+	 *        como la consulta general; al elegir uno, sus propiedades y el documento (DocumentPropertiesService, que
+	 *        trae de S3 el contenido de los documentos con file_key y storage_name). El árbol y el visor vienen de
+	 *        GQViewFeature (PortalUpICN).
 	 * @augments ecm.widget.layout._LaunchBarPane
 	 */
 	return declare("dynamicQueriesDojo.DQResults", [
@@ -106,6 +181,12 @@ function(declare,
 				style: "width:100%; height:100%;"
 			}, this.gridNode);
 			this.grid.startup();
+
+			// Abierto desde la URL (&feature=DQResults), en 3.0.10 ICN crea y selecciona el panel antes del login y no
+			// llama a loadContent, y Desktop.onLogin no avisa del primer inicio de sesión (igual que en DynamicQueries.js):
+			// se revisa la sesión periódicamente y se carga en cuanto haya usuario. También vacía el panel al cambiar de
+			// usuario, porque ICN lo reutiliza entre sesiones en la misma pestaña.
+			this._sessionTimer = setInterval(lang.hitch(this, this._checkSession), SESSION_CHECK_MS);
 
 			this.logExit("postCreate");
 		},
@@ -136,6 +217,7 @@ function(declare,
 			if (!this.isLoaded) {
 				this.isLoaded = true;
 				this.needReset = false;
+				this._loadProjects();
 			}
 
 			this.logExit("loadContent");
@@ -153,42 +235,307 @@ function(declare,
 		},
 
 		destroy: function() {
+			clearInterval(this._sessionTimer);
 			this._revokeViewerUrl();
+			this._destroyFields();
 			this.inherited(arguments);
 		},
 
-		// Buscar: documentos del tipo y número de identificación, agrupados en carpetas.
-		_onSearch: function() {
-			this._showLoading(true);
-			var payload = {
-				identificationNumber: this.numIdField.get("value"),
-				typeIdentification: this.tipoIdField.get("value")
-			};
-			xhr.post(API_CONTEXT + "/api/documents/queryContent", {
-				data: JSON.stringify(payload),
-				handleAs: "json",
-				headers: { "Content-Type": "application/json" }
-			}).then(lang.hitch(this, function(response) {
-				this._showLoading(false);
-				this._clearScreen();
-				if (response && response.length > 0) {
-					this._buildTree(this.buildTreeData(response));
-				} else {
-					this._showAlert("La búsqueda no obtuvo resultados.");
-					this.numIdField.set("value", "");
-				}
+		_checkSession: function() {
+			var user = Desktop.connected ? Desktop.userId || "" : "";
+			if (user !== this._sessionUser) {
+				this._sessionUser = user;
+				this._resetSession();
+			}
+			// Una sola carga automática por sesión: si falla, se reintenta al volver a abrir el feature (loadContent).
+			if (user && this.selected && !this.isLoaded && !this._sessionLoaded) {
+				this._sessionLoaded = true;
+				this.loadContent();
+			}
+		},
+
+		_resetSession: function() {
+			this._sessionLoaded = false;
+			this.isLoaded = false;
+			this._projects = {};
+			this.projectField.set("options", []);
+			this.projectField.set("disabled", true);
+			this.searchButton.set("disabled", true);
+			this._destroyFields();
+			this._clearScreen();
+			this._setMessage("");
+		},
+
+		// Proyectos activos con al menos una consulta activa (la consulta y su asociación), del microservicio de DQ.
+		_loadProjects: function() {
+			this._projects = {};
+			this._setMessage("Cargando proyectos...");
+			SettingsClient.getSettings().then(lang.hitch(this, function(settings) {
+				DqApiClient.baseUrl = settings.projectsApiUrl || "";
+				// Para las listas de opciones de los comodines; si no está en el escritorio, los campos son de texto.
+				this._repository = Desktop.getRepository(settings.repositoryId) || null;
+				this._attributeDefinitions = {};
+				return DqApiClient.listProjectQueryCompose();
+			})).then(lang.hitch(this, function(projects) {
+				var options = [];
+				array.forEach(array.filter(projects || [], isActive).sort(byName), lang.hitch(this, function(project) {
+					var queries = array.filter(project.queries || [], function(query) {
+						return isActive(query) && query.projectQueryStatus !== "INACTIVE";
+					});
+					if (queries.length) {
+						this._projects[project.id] = { project: project, queries: queries.sort(byName) };
+						options.push({ label: project.name, value: String(project.id) });
+					}
+				}));
+				this.projectField.set("options", [ { label: "Seleccione un proyecto", value: "" } ].concat(options));
+				this.projectField.set("value", "");
+				this.projectField.set("disabled", options.length === 0);
+				this._onProjectChange("");
+				this._setMessage(options.length ? "" : "No hay proyectos activos con consultas activas.");
 			}), lang.hitch(this, function(error) {
-				this._showLoading(false);
-				console.error("DQResults: error en la consulta", error);
-				this._showAlert("Ocurrió un error al procesar la búsqueda.");
-				this.numIdField.set("value", "");
-				this._clearScreen();
+				// Se reintenta la próxima vez que se abra el feature.
+				this.isLoaded = false;
+				this._setMessage("No se pudieron cargar los proyectos: " + error.message, true);
 			}));
 		},
 
+		// Arma el formulario con los comodines de las consultas del proyecto elegido; antes busca las listas de opciones
+		// de sus propiedades.
+		_onProjectChange: function(projectId) {
+			this._destroyFields();
+			this._clearScreen();
+			var entry = this._projects && this._projects[projectId];
+			this.searchButton.set("disabled", true);
+			// Si el usuario cambia de proyecto mientras se buscan las listas, solo vale la última elección.
+			var request = this._fieldsRequest = (this._fieldsRequest || 0) + 1;
+			if (!entry) {
+				return;
+			}
+			var parameters = projectParameters(entry.queries);
+			this._setMessage(parameters.length ? "Cargando campos..." : "");
+			all(array.map(parameters, lang.hitch(this, this._getChoices))).then(lang.hitch(this, function(choices) {
+				if (request === this._fieldsRequest) {
+					this._buildFields(entry, parameters, choices);
+				}
+			}), lang.hitch(this, function(error) {
+				// Un error inesperado al leer las listas no impide buscar: campos de texto.
+				console.error("DQResults: error leyendo las listas de opciones", error);
+				if (request === this._fieldsRequest) {
+					this._buildFields(entry, parameters, []);
+				}
+			}));
+		},
+
+		_buildFields: function(entry, parameters, choices) {
+			array.forEach(parameters, lang.hitch(this, function(parameter, i) {
+				var item = domConstruct.create("div", { "class": "dqResultsSearchItem" }, this.parametersNode);
+				var widget = choices[i] ? this._createChoiceField(parameter, choices[i]) : this._createField(parameter);
+				domConstruct.create("label", { "for": widget.id, textContent: parameter.label + ":" }, item);
+				widget.placeAt(item);
+				widget.startup();
+				// Enter en un campo es Buscar, como en la consulta general.
+				widget.own(on(widget.domNode, "keydown", lang.hitch(this, function(event) {
+					if (event.keyCode === keys.ENTER) {
+						this._onSearch();
+					}
+				})));
+				this._fields.push({ parameter: parameter, widget: widget });
+			}));
+			this.searchButton.set("disabled", false);
+			var count = entry.queries.length;
+			this._setMessage(count + (count === 1 ? " consulta" : " consultas") +
+				(this._fields.length ? "; llene los campos y pulse Buscar." : " sin comodines; pulse Buscar."));
+		},
+
+		// La región superior del BorderContainer conserva la altura con que se dibujó: al cambiar los campos o el mensaje
+		// (que pueden ocupar otra línea) hay que volver a calcularla, o la región central queda encima de los campos.
+		_layoutSearchPane: function() {
+			if (this.searchContainer && this.searchContainer._started) {
+				this.searchContainer.layout();
+			}
+		},
+
 		/**
-		 * Convierte la respuesta de queryContent en los items del árbol. Cada elemento trae en text la ruta de carpetas
-		 * separada por comas y en children sus documentos ({ text, viewerUrl, mimeType, data }).
+		 * Lista de opciones de la propiedad del comodín en la clase de su consulta (la primera de sources que tenga una),
+		 * de las definiciones de atributos de ICN: se resuelve con [ { label, value } ] o null. Nunca se rechaza: sin
+		 * repositorio, si la clase no existe o falla la consulta, el campo es de texto.
+		 */
+		_getChoices: function(parameter) {
+			var sources = parameter.sources || [];
+			var next = lang.hitch(this, function(i) {
+				if (i >= sources.length) {
+					return null;
+				}
+				return this._getAttributeDefinitions(sources[i].className).then(function(definitions) {
+					for (var j = 0; j < definitions.length; j++) {
+						var choiceList = definitions[j].id === sources[i].property && definitions[j].choiceList;
+						if (choiceList && choiceList.choices && choiceList.choices.length) {
+							return choiceOptions(choiceList.choices);
+						}
+					}
+					return next(i + 1);
+				});
+			});
+			return when(next(0));
+		},
+
+		// Definiciones de atributos de una clase (ContentClass.retrieveAttributeDefinitions), una vez por clase; [] si fallan
+		// o no llegan a tiempo (ATTRIBUTES_TIMEOUT_MS).
+		_getAttributeDefinitions: function(className) {
+			if (!this._attributeDefinitions[className]) {
+				var deferred = new Deferred();
+				this._attributeDefinitions[className] = deferred.promise;
+				var contentClass = this._repository && this._repository.getContentClass(className);
+				var done = function(definitions) {
+					if (!deferred.isFulfilled()) {
+						deferred.resolve(definitions || []);
+					}
+				};
+				if (!contentClass) {
+					done([]);
+				} else {
+					setTimeout(function() {
+						done([]);
+					}, ATTRIBUTES_TIMEOUT_MS);
+					// true: en segundo plano, sin el indicador de progreso ni el diálogo de error de ICN.
+					contentClass.retrieveAttributeDefinitions(done, true, function() {
+						done([]);
+					});
+				}
+			}
+			return this._attributeDefinitions[className];
+		},
+
+		// Lista desplegable con las opciones de la lista de P8; la primera, vacía, obliga a elegir una.
+		_createChoiceField: function(parameter, options) {
+			return new Select({
+				id: this.id + "_param_" + parameter.name,
+				required: true,
+				maxHeight: 300,
+				"class": "dqResultsSearchField",
+				options: [ { label: "Seleccione…", value: "" } ].concat(options)
+			});
+		},
+
+		// Campo del comodín según su tipo; todos son obligatorios porque todas las consultas del proyecto se ejecutan.
+		_createField: function(parameter) {
+			var props = { id: this.id + "_param_" + parameter.name, required: true, "class": "dqResultsSearchField" };
+			switch (parameter.dataType) {
+			case "INTEGER":
+				return new NumberTextBox(lang.mixin(props, { constraints: { places: 0 } }));
+			case "FLOAT":
+				return new NumberTextBox(props);
+			case "DATETIME":
+				return new DateTextBox(props);
+			case "BOOLEAN":
+				return new Select(lang.mixin(props, { options: [ { label: "Sí", value: "true" }, { label: "No", value: "false" } ] }));
+			case "STRING":
+				return new ValidationTextBox(lang.mixin(props, { trim: true }));
+			default:
+				// Sin tipo (consulta creada fuera del plug-in, comodín sin comillas en el CE SQL): un número.
+				return new ValidationTextBox(lang.mixin(props, {
+					trim: true,
+					regExp: "-?\\d+(\\.\\d+)?",
+					invalidMessage: "Escriba un número."
+				}));
+			}
+		},
+
+		_destroyFields: function() {
+			array.forEach(this._fields || [], function(field) {
+				field.widget.destroyRecursive();
+			});
+			this._fields = [];
+			if (this.parametersNode) {
+				domConstruct.empty(this.parametersNode);
+			}
+			this._layoutSearchPane();
+		},
+
+		_setMessage: function(text, isError) {
+			this.messageNode.textContent = text || "";
+			domClass.toggle(this.messageNode, "dqResultsMessageError", !!isError);
+			this._layoutSearchPane();
+		},
+
+		// Buscar: reemplaza los comodines en el CE SQL de cada consulta del proyecto y las ejecuta; los documentos llegan
+		// agrupados en las carpetas de la ruta de agrupación de cada consulta.
+		_onSearch: function() {
+			var entry = this._projects && this._projects[this.projectField.get("value")];
+			if (!entry || this.searchButton.get("disabled")) {
+				return;
+			}
+			var values = {};
+			for (var i = 0; i < this._fields.length; i++) {
+				var widget = this._fields[i].widget;
+				if (widget.validate && !widget.validate()) {
+					widget.focus();
+					this._setMessage("Llene correctamente “" + this._fields[i].parameter.label + "”.", true);
+					return;
+				}
+				values[this._fields[i].parameter.name] = widget.get("value");
+			}
+
+			var queries = [];
+			var failures = [];
+			array.forEach(entry.queries, function(query) {
+				try {
+					queries.push({
+						name: query.name,
+						cesql: QuerySerializer.fillParameters(query.cesql || "", QuerySerializer.getQueryParameters(query), values),
+						config: query.projectQueryConfig || ""
+					});
+				} catch (e) {
+					failures.push({ name: query.name, message: e.message });
+				}
+			});
+			if (!queries.length) {
+				this._showResults({ tree: [], failures: failures, truncated: [] });
+				return;
+			}
+
+			this._showLoading(true);
+			this.searchButton.set("disabled", true);
+			this._setMessage("");
+			ExecuteQueriesClient.execute(queries).then(lang.hitch(this, function(data) {
+				this._showLoading(false);
+				this.searchButton.set("disabled", false);
+				data.failures = failures.concat(data.failures || []);
+				this._showResults(data);
+			}), lang.hitch(this, function(error) {
+				this._showLoading(false);
+				this.searchButton.set("disabled", false);
+				console.error("DQResults: error en la consulta", error);
+				this._clearScreen();
+				this._setMessage("Ocurrió un error al procesar la búsqueda: " + error.message, true);
+			}));
+		},
+
+		// Árbol con los documentos y, debajo del formulario, las consultas que fallaron o se recortaron.
+		_showResults: function(data) {
+			this._clearScreen();
+			var notes = [];
+			if (data.failures.length) {
+				notes.push("No se pudieron ejecutar: " + array.map(data.failures, function(failure) {
+					return failure.name + " (" + failure.message + ")";
+				}).join("; ") + ".");
+			}
+			if (data.truncated && data.truncated.length) {
+				notes.push("Se muestran solo los primeros documentos de: " + data.truncated.join(", ") + ".");
+			}
+			this._setMessage(notes.join(" "), data.failures.length > 0);
+			if (data.tree && data.tree.length > 0) {
+				this._buildTree(this.buildTreeData(data.tree));
+			} else if (!data.failures.length) {
+				this._showAlert("La búsqueda no obtuvo resultados.");
+			}
+		},
+
+		/**
+		 * Convierte el árbol de ExecuteQueriesService (la forma de queryContent de la consulta general) en los items del
+		 * árbol. Cada carpeta trae en text su nombre o una ruta separada por comas ({ vnRoot: "A,B,C" }), que se separa
+		 * en carpetas anidadas; en children, sus documentos ({ text, viewerUrl, mimeType, data }) y sus subcarpetas
+		 * ({ vnRoot: [ { name }, … ] }). Las carpetas con la misma ruta se fusionan.
 		 */
 		buildTreeData: function(response) {
 			var data = [ { id: "root", name: "Documentos", type: "folder" } ];
@@ -196,8 +543,7 @@ function(declare,
 			var folderIds = {};
 			var idCounter = 1;
 
-			array.forEach(response, function(entry) {
-				var parentId = "root";
+			var addFolder = function(entry, parentId) {
 				array.forEach(String(entry.text).split(","), function(folderName) {
 					folderName = folderName.trim();
 					var pathKey = parentId + "/" + folderName;
@@ -209,6 +555,10 @@ function(declare,
 				});
 
 				array.forEach(entry.children || [], function(child) {
+					if (child.type === "Virtual") {
+						addFolder(child, parentId);
+						return;
+					}
 					data.push({
 						id: "d" + (idCounter++),
 						name: String(child.text).trim(),
@@ -219,6 +569,9 @@ function(declare,
 						data: child.data || null
 					});
 				});
+			};
+			array.forEach(response, function(entry) {
+				addFolder(entry, "root");
 			});
 
 			return data;
@@ -293,8 +646,9 @@ function(declare,
 		},
 
 		/**
-		 * Propiedades del documento en el grid y el documento en el visor: con bookmark.jsp de ICN o, si las
-		 * propiedades traen el contenido (S3_FILE), decodificado en el navegador.
+		 * Propiedades del documento en el grid y el documento en el visor: con bookmark.jsp de ICN o, si está en S3
+		 * (file_key y storage_name), su contenido en base64 decodificado en el navegador (DocumentPropertiesService lo
+		 * descarga, como /portalUpApp/api/documents/properties de la consulta general).
 		 */
 		getDocumentProperties: function(doc) {
 			if (!doc || !doc.objectStoreName || !doc.objId) {
@@ -302,41 +656,45 @@ function(declare,
 				return;
 			}
 			this._showLoading(true);
-			var payload = {
-				objectstore: doc.objectStoreName,
-				documentId: doc.objId
-			};
-			xhr.post(API_CONTEXT + "/api/documents/properties", {
-				data: JSON.stringify(payload),
-				handleAs: "json",
-				headers: { "Content-Type": "application/json" }
-			}).then(lang.hitch(this, function(response) {
-				var gridData = [];
-				var s3FileKey = null;
-				var idCounter = 1;
-				for (var key in response) {
-					if (!response.hasOwnProperty(key)) {
-						continue;
-					}
-					if (key.toLowerCase() === S3_FILE) {
-						s3FileKey = key;
-					} else {
-						gridData.push({ id: idCounter++, key: key, value: response[key] || "" });
-					}
+			// Si el usuario elige otro documento antes de que llegue la respuesta, solo vale el último.
+			var request = this._documentRequest = (this._documentRequest || 0) + 1;
+			DocumentPropertiesClient.getProperties(doc.objId).then(lang.hitch(this, function(data) {
+				if (request !== this._documentRequest) {
+					return;
 				}
-				this._loadGridData(gridData);
-				if (s3FileKey === null) {
+				var title = null;
+				this._loadGridData(array.map(data.properties || [], function(property, i) {
+					if (property.name === "DocumentTitle") {
+						title = property.value;
+					}
+					return { id: i + 1, key: property.label || property.name, value: property.value || "" };
+				}));
+				if (!data.s3) {
 					this._showIcnViewer(doc);
+				} else if (data.file) {
+					try {
+						this.showViewerBase64(data.file, data.mimeType || this.getMimeType(title) || "application/pdf");
+					} catch (e) {
+						console.error("DQResults: no se pudo mostrar el contenido de S3", e);
+						this._showViewerMessage("No se pudo mostrar el documento: " + e.message);
+					}
 				} else {
-					var mimeType = response.MimeType || this.getMimeType(response.DocumentTitle) || "application/pdf";
-					this.showViewerBase64(response[s3FileKey], mimeType);
+					this._showViewerMessage(data.fileError || "El contenido del documento no está disponible.");
 				}
 				this._showLoading(false);
 			}), lang.hitch(this, function(error) {
+				if (request !== this._documentRequest) {
+					return;
+				}
 				this._showLoading(false);
 				console.error("DQResults: error consultando propiedades", error);
-				this._showAlert("No se pudieron consultar las propiedades del documento.");
+				this._showAlert("No se pudieron consultar las propiedades del documento: " + error.message);
 			}));
+		},
+
+		_showViewerMessage: function(message) {
+			this._clearViewer();
+			domConstruct.create("div", { "class": "dqResultsViewerMessage", textContent: message }, this.viewerNode);
 		},
 
 		_showIcnViewer: function(doc) {

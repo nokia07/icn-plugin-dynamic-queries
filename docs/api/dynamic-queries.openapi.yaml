@@ -465,6 +465,14 @@ components:
             `20260315T050000Z` en UTC, booleano TRUE/FALSE, GUID entre llaves). Solo en operadores de un valor
             (no IN/NOT_IN, BETWEEN/NOT_BETWEEN ni IS_NULL/IS_NOT_NULL), y único dentro de la definición.
           example: NroIdentificacion
+        parameterOrder:
+          type: integer
+          minimum: 1
+          description: |
+            Solo con `parameter`: posición del campo del comodín en el formulario de quien ejecuta la consulta
+            (1 es el primero; único dentro de la definición). Los comodines sin orden van al final, en el orden en que
+            aparecen sus condiciones. Si el mismo comodín está en varias consultas de un proyecto, vale el menor.
+          example: 1
 
     Group:
       type: object

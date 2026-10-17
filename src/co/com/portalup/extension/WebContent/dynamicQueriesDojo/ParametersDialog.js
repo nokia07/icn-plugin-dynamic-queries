@@ -5,11 +5,12 @@ define([
 	"dojo/dom-class",
 	"dojo/dom-construct",
 	"dijit/form/CheckBox",
+	"dijit/form/NumberTextBox",
 	"ecm/widget/ValidationTextBox",
 	"ecm/widget/dialog/BaseDialog",
 	"dynamicQueriesDojo/QuerySerializer"
 ],
-function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextBox, BaseDialog, QuerySerializer) {
+function(declare, lang, array, domClass, domConstruct, CheckBox, NumberTextBox, ValidationTextBox, BaseDialog, QuerySerializer) {
 
 	var OPERATOR_LABELS = {
 		EQUAL: "igual a",
@@ -41,8 +42,9 @@ function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextB
 	/**
 	 * @name dynamicQueriesDojo.ParametersDialog
 	 * @class "Comodines": marca qué condiciones de los filtros se piden al ejecutar la consulta guardada y con qué
-	 *        nombre (#Nombre en el CE SQL, ver QuerySerializer). Las condiciones conservan su valor de ejemplo, que es
-	 *        el que usa Buscar en el diseñador. Solo se listan las condiciones con valor.
+	 *        nombre (#Nombre en el CE SQL, ver QuerySerializer), y en qué orden aparecen sus campos en "Resultados de
+	 *        consultas". Las condiciones conservan su valor de ejemplo, que es el que usa Buscar en el diseñador. Solo se
+	 *        listan las condiciones con valor.
 	 * @augments ecm.widget.dialog.BaseDialog
 	 */
 	return declare("dynamicQueriesDojo.ParametersDialog", [ BaseDialog ], {
@@ -51,7 +53,7 @@ function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextB
 		// Definición actual de la consulta (QuerySerializer.serialize).
 		definition: null,
 
-		// Comodines actuales: { clave: nombre } (claves de QuerySerializer.getConditions).
+		// Comodines actuales: { clave: { name, order } } (claves de QuerySerializer.getConditions).
 		parameters: null,
 
 		fitContentArea: false,
@@ -67,7 +69,8 @@ function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextB
 			domConstruct.create("p", {
 				"class": "dqParametersIntro",
 				textContent: "Marque las condiciones cuyo valor se pedirá al ejecutar la consulta guardada. En el CE SQL " +
-					"el valor se reemplaza por #Nombre; el valor actual queda como ejemplo para probar con Buscar."
+					"el valor se reemplaza por #Nombre; el valor actual queda como ejemplo para probar con Buscar. Orden es la " +
+					"posición del campo al ejecutar la consulta en Resultados de consultas (1 es el primero)."
 			}, this.contentArea);
 			if (!conditions.length) {
 				this.setMessage("Defina primero en los filtros las condiciones con un valor de ejemplo.", "info");
@@ -76,7 +79,7 @@ function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextB
 
 			var table = domConstruct.create("table", { "class": "dqParametersTable" }, this.contentArea);
 			var header = domConstruct.create("tr", null, domConstruct.create("thead", null, table));
-			array.forEach([ "Comodín", "Condición", "Nombre" ], function(title) {
+			array.forEach([ "Comodín", "Condición", "Nombre", "Orden" ], function(title) {
 				domConstruct.create("th", { textContent: title }, header);
 			});
 			var body = domConstruct.create("tbody", null, table);
@@ -89,9 +92,10 @@ function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextB
 			var condition = entry.condition;
 			var allowed = QuerySerializer.canBeParameter(condition);
 			var current = (this.parameters || {})[entry.key];
+			var checked = allowed && !!current;
 			var row = domConstruct.create("tr", null, body);
 
-			var checkBox = new CheckBox({ checked: allowed && !!current, disabled: !allowed });
+			var checkBox = new CheckBox({ checked: checked, disabled: !allowed });
 			checkBox.placeAt(domConstruct.create("td", null, row));
 			this.own(checkBox);
 
@@ -109,7 +113,7 @@ function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextB
 			}
 
 			var nameField = new ValidationTextBox({
-				value: current || suggestedName(condition.property),
+				value: current ? current.name : suggestedName(condition.property),
 				disabled: !checkBox.get("checked"),
 				required: true,
 				trim: true,
@@ -119,29 +123,65 @@ function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextB
 				invalidMessage: "Empiece por una letra y use solo letras, números o _."
 			});
 			nameField.placeAt(domConstruct.create("td", null, row));
-			this.own(nameField, checkBox.on("change", function(checked) {
-				nameField.set("disabled", !checked);
-			}));
 
-			this._rows.push({ key: entry.key, checkBox: checkBox, nameField: nameField });
+			// Sin orden guardado (consultas anteriores a esta opción), el siguiente a los ya marcados.
+			var orderField = new NumberTextBox({
+				"class": "dqParametersOrder",
+				value: !checked ? NaN : current.order !== undefined ? current.order : this._nextOrder(),
+				disabled: !checked,
+				required: true,
+				constraints: { min: 1, max: 999, places: 0 },
+				invalidMessage: "Use un entero mayor que 0.",
+				rangeMessage: "Use un entero entre 1 y 999."
+			});
+			orderField.placeAt(domConstruct.create("td", null, row));
+
+			this.own(nameField, orderField, checkBox.on("change", lang.hitch(this, function(isChecked) {
+				nameField.set("disabled", !isChecked);
+				orderField.set("disabled", !isChecked);
+				if (isChecked && isNaN(orderField.get("value"))) {
+					orderField.set("value", this._nextOrder());
+				}
+			})));
+
+			this._rows.push({ key: entry.key, checkBox: checkBox, nameField: nameField, orderField: orderField });
+		},
+
+		// Orden propuesto para un comodín recién marcado: uno más que el mayor de los marcados.
+		_nextOrder: function() {
+			var max = 0;
+			array.forEach(this._rows, function(row) {
+				var order = row.orderField.get("value");
+				if (row.checkBox.get("checked") && order > max) {
+					max = order;
+				}
+			});
+			return max + 1;
 		},
 
 		_onApply: function() {
 			var parameters = {};
 			var used = {};
+			var usedOrders = {};
 			var error = null;
 			array.forEach(this._rows, function(row) {
 				if (error || !row.checkBox.get("checked")) {
 					return;
 				}
 				var name = row.nameField.get("value");
+				var order = row.orderField.get("value");
 				if (!PARAMETER_NAME.test(name)) {
 					error = "El nombre “" + name + "” no es válido: empiece por una letra y use solo letras, números o _.";
 				} else if (used[name]) {
 					error = "El comodín #" + name + " está repetido; use nombres distintos.";
+				} else if (!row.orderField.isValid() || !(order >= 1)) {
+					error = "El orden de #" + name + " debe ser un entero entre 1 y 999.";
+				} else if (usedOrders[order]) {
+					error = "El orden " + order + " está en #" + usedOrders[order] + " y en #" + name + "; use órdenes distintos.";
 				}
 				used[name] = true;
-				parameters[row.key] = name;
+				usedOrders[order] = name;
+				parameters[row.key] = { name: name, order: order };
 			});
 			if (error) {
 				this.setMessage(error, "error");
@@ -152,7 +192,7 @@ function(declare, lang, array, domClass, domConstruct, CheckBox, ValidationTextB
 		},
 
 		/**
-		 * Se invoca con los comodines elegidos: { clave: nombre }.
+		 * Se invoca con los comodines elegidos: { clave: { name, order } }.
 		 */
 		onApply: function(parameters) {
 		}

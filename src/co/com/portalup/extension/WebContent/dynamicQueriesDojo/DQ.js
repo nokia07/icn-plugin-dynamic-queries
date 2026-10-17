@@ -282,17 +282,11 @@ function(declare,
 					this._showError(e.message);
 					return;
 				}
-				var parameters = {};
-				array.forEach(QuerySerializer.getConditions(definition), function(entry) {
-					if (entry.condition.parameter) {
-						parameters[entry.key] = entry.condition.parameter;
-					}
-				});
 				this.openQueryTab(repository, searchTemplate, {
 					savedQuery: query,
 					initialResultsDisplay: searchTemplate.resultsDisplay,
 					runOnOpen: !!run,
-					parameters: parameters
+					parameters: QuerySerializer.getWildcards(definition)
 				});
 			}), lang.hitch(this, function(error) {
 				this._showError(error.message);

@@ -11,6 +11,8 @@ class FakeSearchTemplate {
 global.define = (deps, f) => { mod = f({ map: (a, fn) => a.map(fn), filter: (a, fn) => a.filter(fn), forEach: (a, fn) => a.forEach(fn), indexOf: (a, v) => a.indexOf(v) }, FakeSearchTemplate); };
 require(path.join(__dirname, "../src/co/com/portalup/extension/WebContent/dynamicQueriesDojo/QuerySerializer.js"));
 const S = mod;
+// Comodines como los arma el diálogo ({ clave: { name, order } }) a partir de { clave: nombre }.
+const wildcards = names => Object.fromEntries(Object.entries(names).map(([key, name]) => [key, { name }]));
 const base = () => ({
   repository: { id: "Proteccion", objectStoreName: "Proteccion", objectStoreId: "{B879}" },
   folder: { item: { id: "Folder,{B879},{0F1E}" }, path: "\\Proteccion", includeSubfolders: true },
@@ -158,7 +160,7 @@ st.criteria = [
   { anded: false, criteria: [c("Monto", "xs:integer", "GREATER", ["10", ""]), c("Nombre", "xs:string", "LIKE", ["ana", ""])] },
   c("Fecha", "xs:timestamp", "LESS", ["2026-03-15T00:00:00.000-05:00", ""])
 ];
-st.parameters = { "NroIdentificacion#1": "NroIdentificacion", "TipoIdentificacion#1": "TipoIdentificacion", "Monto#1": "MontoMin", "Nombre#1": "Nombre", "Fecha#1": "Hasta" };
+st.parameters = wildcards({ "NroIdentificacion#1": "NroIdentificacion", "TipoIdentificacion#1": "TipoIdentificacion", "Monto#1": "MontoMin", "Nombre#1": "Nombre", "Fecha#1": "Hasta" });
 r = S.build(st);
 assert.deepStrictEqual(r.errors, []);
 assert.deepStrictEqual(r.definition.criteria[0], { type: "condition", property: "NroIdentificacion", dataType: "STRING", operator: "EQUAL", values: ["71234567"], label: "NroIdentificacion", parameter: "NroIdentificacion" });
@@ -171,16 +173,14 @@ assert.deepStrictEqual(S.getParameters(r.definition).map(p => p.name), ["NroIden
 assert.deepStrictEqual(S.getParameters(r.definition)[2], { name: "MontoMin", property: "Monto", label: "Monto", dataType: "INTEGER", operator: "GREATER", sample: 10 });
 assert.deepStrictEqual(S.getConditions(r.definition).map(e => e.key), ["NroIdentificacion#1", "TipoIdentificacion#1", "Alcance#1", "Monto#1", "Nombre#1", "Fecha#1"]);
 // Reabrir: las claves de getConditions reconstruyen los comodines y el resultado es el mismo
-const reopened = {};
-S.getConditions(r.definition).forEach(e => { if (e.condition.parameter) reopened[e.key] = e.condition.parameter; });
-assert.deepStrictEqual(reopened, st.parameters);
+assert.deepStrictEqual(S.getWildcards(r.definition), st.parameters);
 // El comodín no llega a ICN: al reabrir se ve el valor de ejemplo
 assert.deepStrictEqual(S.toIcnSearch(r.definition, { objectStoreId: "{B879}", objectStoreName: "Proteccion" }).criterias[0].values, ["71234567"]);
 
 // 13. Comodines no válidos: operador de varios valores, nombre con espacios, nombre repetido
 st = base();
 st.criteria = [c("A", "xs:string", "INANY", ["x", "y"]), c("B", "xs:string", "EQUAL", ["b"]), c("C", "xs:string", "EQUAL", ["c"]), c("D", "xs:string", "EQUAL", ["d"])];
-st.parameters = { "A#1": "A", "B#1": "mal nombre", "C#1": "Repetido", "D#1": "Repetido" };
+st.parameters = wildcards({ "A#1": "A", "B#1": "mal nombre", "C#1": "Repetido", "D#1": "Repetido" });
 r = S.build(st);
 assert.strictEqual(r.errors.length, 3);
 assert.ok(/no admite este operador/.test(r.errors[0]));
@@ -204,7 +204,7 @@ st.criteria = [
   c("Alcance", "xs:string", "EQUAL", ["A", ""], "Alcance"),
   c("LineaProducto", "xs:string", "EQUAL", ["V", ""], "Linea de Producto")
 ];
-st.parameters = { "NroIdentificacion#1": "NroIdentificacion", "TipoIdentificacion#1": "TipoIdentificacion" };
+st.parameters = wildcards({ "NroIdentificacion#1": "NroIdentificacion", "TipoIdentificacion#1": "TipoIdentificacion" });
 r = S.build(st);
 assert.deepStrictEqual(r.errors, []);
 const size = JSON.stringify(r.definition).length;
@@ -217,4 +217,41 @@ st.keepLabels = true;
 assert.deepStrictEqual(S.build(st).definition.criteria.map(x => x.label), ["Numero de Identificacion", "Tipo de Identificacion", "Alcance", "Linea de Producto"]);
 st.keepLabels = false;
 assert.deepStrictEqual(S.build(st).definition.criteria.map(x => x.label), ["Numero de Identificacion", "Tipo de Identificacion", undefined, undefined]);
-console.log("OK: 16 casos (config del ejemplo: " + size + " caracteres)");
+// 17. Ejecutar (Resultados de consultas): comodines de la consulta guardada y CE SQL con los valores escapados
+const saved = { cesql: S.toCeSql(r.definition), config: JSON.stringify(r.definition) };
+const params = S.getQueryParameters(saved);
+assert.deepStrictEqual(params, [
+  { name: "NroIdentificacion", label: "Numero de Identificacion", dataType: "STRING", className: "Afiliaciones", property: "NroIdentificacion" },
+  { name: "TipoIdentificacion", label: "Tipo de Identificacion", dataType: "STRING", className: "Afiliaciones", property: "TipoIdentificacion" }
+]);
+assert.strictEqual(S.fillParameters(saved.cesql, params, { NroIdentificacion: "71'234", TipoIdentificacion: "CC" }),
+  "SELECT d.[Id], d.[DocumentTitle] FROM [Afiliaciones] d WITH EXCLUDESUBCLASSES WHERE d.[NroIdentificacion] = '71''234'" +
+  " AND d.[TipoIdentificacion] = 'CC' AND d.[Alcance] = 'A' AND d.[LineaProducto] = 'V' AND d.[VersionStatus] = 1");
+assert.throws(() => S.fillParameters(saved.cesql, params, { NroIdentificacion: " ", TipoIdentificacion: "CC" }), /Falta el valor de #NroIdentificacion/);
+// 18. Consulta creada fuera del plug-in (config no es una definición): los #Nombre del CE SQL; un nombre que es prefijo
+// de otro no lo pisa; fuera de comillas, número; en LIKE y con tipo (fecha) desde la definición
+const external = { cesql: "SELECT Id FROM Doc WHERE Nro = '#Nro' AND NroLargo LIKE '%#NroLargo%' AND Anio = #Anio", config: "{ vnRoot: \"A\" }" };
+const extParams = S.getQueryParameters(external);
+assert.deepStrictEqual(extParams.map(x => [x.name, x.dataType]), [["Nro", "STRING"], ["NroLargo", "STRING"], ["Anio", null]]);
+assert.strictEqual(S.fillParameters(external.cesql, extParams, { Nro: "1", NroLargo: "2", Anio: "2026" }),
+  "SELECT Id FROM Doc WHERE Nro = '1' AND NroLargo LIKE '%2%' AND Anio = 2026");
+assert.throws(() => S.fillParameters(external.cesql, extParams, { Nro: "1", NroLargo: "2", Anio: "1 OR 1=1" }), /debe ser un número/);
+assert.strictEqual(S.fillParameters("WHERE d.[F] >= #Desde", [{ name: "Desde", dataType: "DATETIME" }], { Desde: "2026-03-15T00:00:00.000-05:00" }),
+  "WHERE d.[F] >= 20260315T050000Z");
+// 19. Orden de los comodines: getParameters/getQueryParameters por parameterOrder (sin orden, al final en el orden
+// de las condiciones); se conserva al reabrir; un orden no entero es un error
+st = base();
+st.criteria = [c("A", "xs:string", "EQUAL", ["a"]), c("B", "xs:string", "EQUAL", ["b"]), c("C", "xs:string", "EQUAL", ["c"]), c("D", "xs:string", "EQUAL", ["d"])];
+st.parameters = { "A#1": { name: "A" }, "B#1": { name: "B", order: 2 }, "C#1": { name: "C", order: 1 }, "D#1": { name: "D" } };
+r = S.build(st);
+assert.deepStrictEqual(r.errors, []);
+assert.strictEqual(r.definition.criteria[1].parameterOrder, 2);
+assert.ok(!("parameterOrder" in r.definition.criteria[0]));
+assert.deepStrictEqual(S.getParameters(r.definition).map(p => p.name), ["C", "B", "A", "D"]);
+assert.deepStrictEqual(S.getQueryParameters({ cesql: S.toCeSql(r.definition), config: JSON.stringify(r.definition) }).map(p => [p.name, p.order]),
+  [["C", 1], ["B", 2], ["A", undefined], ["D", undefined]]);
+assert.deepStrictEqual(S.getWildcards(r.definition), st.parameters);
+assert.deepStrictEqual(S.sortParameters([{ name: "x" }, { name: "y", order: 3 }, { name: "z" }, { name: "w", order: 1 }]).map(p => p.name), ["w", "y", "x", "z"]);
+st.parameters = { "A#1": { name: "A", order: 1.5 } };
+assert.ok(/debe ser un entero mayor que 0/.test(S.build(st).errors[0]));
+console.log("OK: 19 casos (config del ejemplo: " + size + " caracteres)");

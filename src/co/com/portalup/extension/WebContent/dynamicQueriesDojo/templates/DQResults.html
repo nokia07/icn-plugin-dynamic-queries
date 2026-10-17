@@ -4,41 +4,29 @@
 		class="dqResultsMainContainer">
 
 		<div data-dojo-type="dijit/layout/BorderContainer"
-			data-dojo-props="region:'center', gutters:true, liveSplitters:true">
+			data-dojo-props="region:'center', gutters:true, liveSplitters:true"
+			data-dojo-attach-point="searchContainer">
 
-			<!-- Barra de búsqueda superior -->
+			<!-- Barra superior: proyecto, comodines de sus consultas y Buscar -->
 			<div data-dojo-type="dijit/layout/ContentPane"
 				data-dojo-props="region:'top'"
 				class="dqResultsSearchPane">
 				<div class="dqResultsSearchRow">
-					<label for="${id}_tipoId">Tipo de identificación:</label>
-					<select data-dojo-type="dijit/form/Select" id="${id}_tipoId"
-						data-dojo-attach-point="tipoIdField" class="dqResultsSearchField">
-						<option value="CC">Cédula de ciudadanía</option>
-						<option value="CE">Cédula de extranjería</option>
-						<option value="PAS">Pasaporte</option>
-						<option value="TI">Tarjeta de Identidad</option>
-						<option value="RCN">Registro Civil</option>
-						<option value="NUIP">Número Único de Identificación</option>
-						<option value="CD">Carnet Diplomático</option>
-						<option value="ASI">Adulto Sin Identificación</option>
-						<option value="FI">Fideicomiso</option>
-						<option value="MSI">Menor Sin Identificación</option>
-						<option value="NIT">NIT</option>
-						<option value="RM">Registro Mercantil</option>
-						<option value="SE">Sociedad Extranjera sin NIT en Colombia</option>
-						<option value="PT">Permiso Temporal</option>
-						<option value="PE">Permiso Especial de Permanencia</option>
-					</select>
-
-					<label for="${id}_numId">Número de identificación:</label>
-					<input data-dojo-type="dijit/form/TextBox" id="${id}_numId"
-						data-dojo-attach-point="numIdField" class="dqResultsSearchField">
-
+					<div class="dqResultsSearchItem">
+						<label for="${id}_project">Proyecto:</label>
+						<select data-dojo-type="dijit/form/Select" id="${id}_project"
+							data-dojo-props="disabled:true, maxHeight:300"
+							data-dojo-attach-point="projectField"
+							data-dojo-attach-event="onChange: _onProjectChange"
+							class="dqResultsSearchField dqResultsProjectField"></select>
+					</div>
+					<div data-dojo-attach-point="parametersNode" class="dqResultsParameters"></div>
 					<button type="button" data-dojo-type="dijit/form/Button"
+						data-dojo-props="disabled:true"
 						data-dojo-attach-point="searchButton"
 						data-dojo-attach-event="onClick: _onSearch">Buscar</button>
 				</div>
+				<div data-dojo-attach-point="messageNode" class="dqResultsMessage" role="status"></div>
 			</div>
 
 			<!-- Cuerpo: dos columnas -->

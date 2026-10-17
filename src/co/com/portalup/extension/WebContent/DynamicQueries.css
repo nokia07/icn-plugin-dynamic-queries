@@ -284,6 +284,10 @@
 	border-bottom: 1px solid #f4f4f4;
 }
 
+.dqParametersDialog .dqParametersOrder {
+	width: 5em;
+}
+
 .dqParametersDialog .dqParametersNote {
 	margin-top: 2px;
 	color: #6f6f6f;
@@ -325,6 +329,7 @@
 
 .dqResultsPane .dqResultsSearchRow {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 12px;
 	align-items: center;
 	border: 1px solid #ddd;
@@ -336,6 +341,36 @@
 
 .dqResultsPane .dqResultsSearchField {
 	width: 200px;
+}
+
+/* Proyecto y cada comodín: rótulo + campo; los comodines se agregan al cambiar de proyecto */
+.dqResultsPane .dqResultsSearchItem,
+.dqResultsPane .dqResultsParameters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+}
+
+.dqResultsPane .dqResultsSearchItem label {
+	white-space: nowrap;
+}
+
+.dqResultsPane .dqResultsProjectField {
+	width: 260px;
+}
+
+.dqResultsPane .dqResultsMessage {
+	margin: 6px 15px 0;
+	color: #525252;
+}
+
+.dqResultsPane .dqResultsMessage:empty {
+	display: none;
+}
+
+.dqResultsPane .dqResultsMessage.dqResultsMessageError {
+	color: #da1e28;
 }
 
 /* Columna izquierda: árbol arriba, propiedades abajo */
@@ -469,6 +504,11 @@
 .dqResultsPane .dqResultsViewerImage {
 	max-width: 100%;
 	height: auto;
+}
+
+.dqResultsPane .dqResultsViewerMessage {
+	padding: 16px;
+	color: #525252;
 }
 
 /* Overlay de carga */
