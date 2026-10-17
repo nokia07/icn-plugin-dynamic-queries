@@ -34,3 +34,8 @@ hs_err_pid*
 .idea/
 *.iml
 .vscode/
+
+# Tooling (Claude Code, graphify)
+.claude/
+graphify-out/
+.graphifyignore
