@@ -14,6 +14,7 @@ define([
 	"dojo/data/ObjectStore",
 	"dijit/tree/ObjectStoreModel",
 	"dijit/Tree",
+	"dijit/registry",
 	"dojox/grid/DataGrid",
 	"dijit/form/Select",
 	"dijit/form/ValidationTextBox",
@@ -50,6 +51,7 @@ function(declare,
 		ObjectStore,
 		ObjectStoreModel,
 		Tree,
+		registry,
 		DataGrid,
 		Select,
 		ValidationTextBox,
@@ -72,6 +74,11 @@ function(declare,
 	// Espera máxima por las definiciones de atributos de una clase: si la clase no existe, ICN 3.0.10 no llama ni al
 	// callback ni al de error de retrieveAttributeDefinitions.
 	var ATTRIBUTES_TIMEOUT_MS = 10000;
+	// Documento cuya composición tardó más que el timeout del servidor: cada cuánto se pregunta si ya existe su versión 2
+	// (el PDF compuesto ya cargado en FileNet) y cuántas veces antes de dejar de esperar (~30 min).
+	var COMPOSE_CHECK_MS = 25000;
+	var COMPOSE_CHECK_MAX = 72;
+	var FEATURE_ID = "DQResults"; // DQResults.getId()
 
 	var MIME_TYPES = {
 		pdf: "application/pdf",
@@ -236,6 +243,7 @@ function(declare,
 
 		destroy: function() {
 			clearInterval(this._sessionTimer);
+			this._stopCompositions();
 			this._revokeViewerUrl();
 			this._destroyFields();
 			this.inherited(arguments);
@@ -255,6 +263,7 @@ function(declare,
 		},
 
 		_resetSession: function() {
+			this._stopCompositions();
 			this._sessionLoaded = false;
 			this.isLoaded = false;
 			this._projects = {};
@@ -599,7 +608,7 @@ function(declare,
 				getIconClass: lang.hitch(this, this._getIconClass),
 				onClick: lang.hitch(this, function(item) {
 					if (item && item.type === "document") {
-						this.getDocumentProperties(item.data);
+						this.getDocumentProperties(item.data, item.name);
 					}
 				})
 			});
@@ -648,9 +657,11 @@ function(declare,
 		/**
 		 * Propiedades del documento en el grid y el documento en el visor: con bookmark.jsp de ICN o, si está en S3
 		 * (file_key y storage_name), su contenido en base64 decodificado en el navegador (DocumentPropertiesService lo
-		 * descarga, como /portalUpApp/api/documents/properties de la consulta general).
+		 * descarga, como /portalUpApp/api/documents/properties de la consulta general). Si file_key es multivalor, el
+		 * servidor lo compone en un PDF y el visor abre su URL prefirmada; si la composición tarda más que el timeout, se
+		 * avisa al usuario y se espera en segundo plano (_watchComposition). name es el nombre del documento en el árbol.
 		 */
-		getDocumentProperties: function(doc) {
+		getDocumentProperties: function(doc, name) {
 			if (!doc || !doc.objectStoreName || !doc.objId) {
 				console.error("DQResults: documento inválido", doc);
 				return;
@@ -658,7 +669,9 @@ function(declare,
 			this._showLoading(true);
 			// Si el usuario elige otro documento antes de que llegue la respuesta, solo vale el último.
 			var request = this._documentRequest = (this._documentRequest || 0) + 1;
-			DocumentPropertiesClient.getProperties(doc.objId).then(lang.hitch(this, function(data) {
+			// Si ya se espera su composición, no se pide otra.
+			var waiting = !!(this._compositions && this._compositions[doc.objId]);
+			DocumentPropertiesClient.getProperties(doc.objId, waiting ? false : undefined).then(lang.hitch(this, function(data) {
 				if (request !== this._documentRequest) {
 					return;
 				}
@@ -669,8 +682,14 @@ function(declare,
 					}
 					return { id: i + 1, key: property.label || property.name, value: property.value || "" };
 				}));
+				if (waiting && !data.composePending) {
+					this._endComposition(doc.objId);
+				}
 				if (!data.s3) {
-					this._showIcnViewer(doc);
+					// releasedId: se eligió la versión 1 y la serie ya tiene la 2 (el PDF compuesto, con otro Id).
+					this._showIcnViewer(data.releasedId ? lang.mixin({}, doc, { objId: data.releasedId }) : doc);
+				} else if (data.composed) {
+					this._showComposedViewer(data.composed.url);
 				} else if (data.file) {
 					try {
 						this.showViewerBase64(data.file, data.mimeType || this.getMimeType(title) || "application/pdf");
@@ -679,6 +698,9 @@ function(declare,
 						this._showViewerMessage("No se pudo mostrar el documento: " + e.message);
 					}
 				} else {
+					if (data.composePending) {
+						this._watchComposition(doc, name || title);
+					}
 					this._showViewerMessage(data.fileError || "El contenido del documento no está disponible.");
 				}
 				this._showLoading(false);
@@ -690,6 +712,130 @@ function(declare,
 				console.error("DQResults: error consultando propiedades", error);
 				this._showAlert("No se pudieron consultar las propiedades del documento: " + error.message);
 			}));
+		},
+
+		// PDF compuesto en S3: la URL prefirmada ya responde application/pdf inline y vence en minutos, así que se
+		// abre de inmediato y no se guarda (la CSP de ICN permite https:).
+		_showComposedViewer: function(url) {
+			this._clearViewer();
+			domConstruct.create("iframe", { src: url, "class": "dqResultsViewerFrame" }, this.viewerNode);
+		},
+
+		/**
+		 * Espera en segundo plano la composición de un documento que tardó más que el timeout: cada COMPOSE_CHECK_MS
+		 * pregunta por la versión liberada de su serie y, cuando el workflow crea la versión 2 (el PDF compuesto ya en
+		 * FileNet), muestra un aviso con el nombre del documento y un botón para verlo. Sigue aunque el usuario cambie de
+		 * feature; se cancela al cambiar de usuario.
+		 */
+		_watchComposition: function(doc, name) {
+			this._compositions = this._compositions || {};
+			if (this._compositions[doc.objId]) {
+				return;
+			}
+			this._compositions[doc.objId] = { doc: doc, name: name || "Documento sin título", checks: 0 };
+			if (!this._compositionTimer) {
+				this._compositionTimer = setInterval(lang.hitch(this, this._checkCompositions), COMPOSE_CHECK_MS);
+			}
+		},
+
+		_checkCompositions: function() {
+			for (var id in this._compositions) {
+				if (this._compositions.hasOwnProperty(id) && !this._compositions[id].checking) {
+					this._checkComposition(id, this._compositions[id]);
+				}
+			}
+		},
+
+		_checkComposition: function(id, entry) {
+			entry.checking = true;
+			entry.checks++;
+			var giveUp = lang.hitch(this, function() {
+				if (entry.checks >= COMPOSE_CHECK_MAX) {
+					this._endComposition(id);
+					this._showNotice("El documento «" + entry.name + "» sigue en composición. Vuelve a abrirlo más tarde.");
+				}
+			});
+			DocumentPropertiesClient.getReleasedVersion(id).then(lang.hitch(this, function(version) {
+				entry.checking = false;
+				if (this._compositions[id] !== entry) {
+					return; // Cancelada mientras tanto.
+				}
+				if (version.majorVersion > 1) {
+					this._endComposition(id);
+					this._showNotice("El documento «" + entry.name + "» ya está disponible.",
+						lang.mixin({}, entry.doc, { objId: version.id }), entry.name);
+				} else {
+					giveUp();
+				}
+			}), lang.hitch(this, function(error) {
+				entry.checking = false;
+				if (this._compositions[id] === entry) {
+					console.warn("DQResults: no se pudo consultar la versión de " + id, error);
+					giveUp();
+				}
+			}));
+		},
+
+		_endComposition: function(id) {
+			delete this._compositions[id];
+			for (var other in this._compositions) {
+				if (this._compositions.hasOwnProperty(other)) {
+					return;
+				}
+			}
+			clearInterval(this._compositionTimer);
+			this._compositionTimer = null;
+		},
+
+		_stopCompositions: function() {
+			clearInterval(this._compositionTimer);
+			this._compositionTimer = null;
+			this._compositions = {};
+			if (this._noticesNode) {
+				domConstruct.destroy(this._noticesNode);
+				this._noticesNode = null;
+			}
+		},
+
+		/**
+		 * Aviso flotante (abajo a la derecha, sobre cualquier feature) que queda hasta que el usuario lo cierra; con doc,
+		 * un botón "Ver" abre el documento en este feature. Van en <body>, como los diálogos.
+		 */
+		_showNotice: function(text, doc, name) {
+			if (!this._noticesNode) {
+				this._noticesNode = domConstruct.create("div", { "class": "dqNotices", role: "status" }, document.body);
+			}
+			var notice = domConstruct.create("div", { "class": "dqNotice" }, this._noticesNode);
+			domConstruct.create("span", { "class": "dqNoticeText", textContent: text }, notice);
+			if (doc) {
+				var open = domConstruct.create("button", { type: "button", "class": "dqNoticeAction", textContent: "Ver" }, notice);
+				on(open, "click", lang.hitch(this, function() {
+					domConstruct.destroy(notice);
+					this._selectPane();
+					this.getDocumentProperties(doc, name);
+				}));
+			}
+			var close = domConstruct.create("button", {
+				type: "button", "class": "dqNoticeClose", title: "Cerrar", "aria-label": "Cerrar", textContent: "\u00d7"
+			}, notice);
+			on(close, "click", function() {
+				domConstruct.destroy(notice);
+			});
+		},
+
+		// Abre este feature si el usuario está en otro: con el botón de la barra (estilo "toolbar"); en el estilo
+		// "flyout" no hay botón y el documento queda cargado para cuando lo abra.
+		_selectPane: function() {
+			if (this.selected) {
+				return;
+			}
+			var bar = array.filter(registry.toArray(), function(widget) {
+				return widget.declaredClass === "ecm.widget.layout.LaunchBarContainer";
+			})[0];
+			var button = bar && bar.getButtonByID(FEATURE_ID);
+			if (button) {
+				(button.focusNode || button.domNode).click();
+			}
 		},
 
 		_showViewerMessage: function(message) {
