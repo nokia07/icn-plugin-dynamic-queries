@@ -28,7 +28,11 @@ oculta esa fila con la clase `dqHiddenAction`: las consultas siempre usan los va
 (raíz del repositorio con subcarpetas, documentos, versión de release).
 
 También oculta "Visualización de resultados" (`resultsDisplayButton`) y la casilla "Mostrar todas las propiedades"
-(`_displayAllPropsArea`, un `<span>` con la casilla y su etiqueta).
+(`_displayAllPropsArea`, un `<span>` con la casilla y su etiqueta), y el engranaje **"Valores avanzados"** de cada
+fila de criterios (`AttributeDefinitionWidget`, attach point `optionNode`: `span.optionIcon` dentro de
+`div.attributeControlsWithAdvancedOption`, junto a +, ↑, ↓ y ×). Como ICN crea una fila por propiedad añadida (también
+dentro de los grupos), se oculta con CSS (`.dqPane .attributeDefintionWidget .optionIcon`, con la errata de ICN en
+`Defintion`).
 
 **"Buscar en varias clases"** (desplegable de `SearchClassSelector`): `BasicSearchDefinition._initContentClassSelector`
 fija `allowMultipleClasses = repository.supportsMultiClassSearch` y el selector crea la casilla (`_multipleClassesChk`,
