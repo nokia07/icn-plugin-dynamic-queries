@@ -125,6 +125,14 @@ function(array, SearchTemplate) {
 		});
 	}
 
+	// Ruta de agrupación o patrón del nombre: cada # debe ser parte de una propiedad del documento #NombreSimbolico#.
+	function validateProperties(text) {
+		if (text.replace(/#[A-Za-z_][A-Za-z0-9_]*#/g, "").indexOf("#") >= 0) {
+			return "Escriba las propiedades como #NombreSimbolico# (letras, dígitos y _, sin espacios).";
+		}
+		return null;
+	}
+
 	// Convierte un ecm.model.SearchCriterion o un ecm.model.SearchCriteria (grupo). Devuelve null si la fila quedó
 	// vacía: ICN también ignora esas filas al buscar. context: { parameters: { clave: { name, order } }, seen: {} }.
 	function convertNode(node, errors, context) {
@@ -564,15 +572,18 @@ function(array, SearchTemplate) {
 		/**
 		 * Ruta de agrupación de los resultados ("Expediente Afiliado,Pensión Voluntaria") → config de la asociación
 		 * proyecto-consulta con el formato de DSCONFIG en CG_CFG_QUERY: { vnRoot: "…" } (no es JSON; así lo lee la
-		 * consulta general). Quita espacios y carpetas vacías.
+		 * consulta general). Quita espacios y carpetas vacías. Con labelPattern (nombre de los documentos en el árbol,
+		 * con propiedades como #Nombre#) agrega docLabel: { vnRoot: "…", docLabel: "…" }; sin él, el nombre es el
+		 * predeterminado (DocumentTree.label).
 		 */
-		toGroupingConfig: function(path) {
+		toGroupingConfig: function(path, labelPattern) {
 			var folders = array.filter(array.map(String(path || "").split(","), function(folder) {
 				return folder.trim();
 			}), function(folder) {
 				return folder.length > 0;
 			});
-			return "{ vnRoot: \"" + folders.join(",") + "\" }";
+			labelPattern = String(labelPattern || "").trim();
+			return "{ vnRoot: \"" + folders.join(",") + "\"" + (labelPattern ? ", docLabel: \"" + labelPattern + "\"" : "") + " }";
 		},
 
 		/**
@@ -588,10 +599,25 @@ function(array, SearchTemplate) {
 			if (path.indexOf("\"") >= 0) {
 				return "La ruta no puede llevar comillas.";
 			}
-			if (path.replace(/#[A-Za-z_][A-Za-z0-9_]*#/g, "").indexOf("#") >= 0) {
-				return "Escriba las propiedades como #NombreSimbolico# (letras, dígitos y _, sin espacios).";
+			return validateProperties(path);
+		},
+
+		/**
+		 * Error del patrón del nombre de los documentos o null si es válido (vacío también: nombre predeterminado). Sin
+		 * comillas (va dentro de docLabel) y con las propiedades como #NombreSimbolico#.
+		 */
+		validateLabelPattern: function(pattern) {
+			pattern = String(pattern || "");
+			if (pattern.indexOf("\"") >= 0) {
+				return "El nombre no puede llevar comillas.";
 			}
-			return null;
+			return validateProperties(pattern);
+		},
+
+		/** Patrón del nombre de los documentos (docLabel) de una config de toGroupingConfig, o "" si no tiene. */
+		getLabelPattern: function(config) {
+			var match = /docLabel\s*:\s*"([^"]*)"/.exec(config || "");
+			return match ? match[1] : "";
 		},
 
 		/** Inverso de toGroupingConfig; una config sin vnRoot (guardada antes como texto libre) se devuelve tal cual. */

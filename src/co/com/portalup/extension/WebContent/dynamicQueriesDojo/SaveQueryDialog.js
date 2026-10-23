@@ -27,7 +27,7 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 	 *        { name, cesql, config, status } (cesql hasta 4000 caracteres; config sin límite) y la asocia a un proyecto (/project-query) con la ruta de agrupación de
 	 *        los resultados como config de la asociación, en el formato de DSCONFIG de la consulta general
 	 *        ({ vnRoot: "Carpeta,Subcarpeta" }, QuerySerializer.toGroupingConfig). El usuario indica nombre, proyecto,
-	 *        ruta y estado; cesql (con los comodines como #Nombre) se genera de la
+	 *        ruta, el patrón opcional del nombre de los documentos en el árbol (docLabel) y estado; cesql (con los comodines como #Nombre) se genera de la
 	 *        definición (QuerySerializer.toCeSql) y config es la definición como JSON, que permite volver a abrirla en
 	 *        el constructor. Con query.id actualiza la consulta (y su asociación) en lugar de crear otra.
 	 *
@@ -114,6 +114,27 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 					"los documentos se agrupan por su valor."
 			}, this._pathField.domNode, "after");
 
+			// Opcional: patrón del nombre de los documentos en el árbol (docLabel); vacío, el nombre predeterminado.
+			this._labelField = new ValidationTextBox({
+				trim: true,
+				propercase: false,
+				maxLength: MAX_GROUPING_CONFIG - 40,
+				placeHolder: "#TipoDocumento# - #NroRadicado#",
+				validator: function(value) {
+					var error = QuerySerializer.validateLabelPattern(value);
+					if (error) {
+						this.invalidMessage = error;
+					}
+					return !error;
+				}
+			});
+			this._addRow(table, "Nombre del documento:", this._labelField);
+			domConstruct.create("div", {
+				"class": "dqConfigHint",
+				textContent: "Texto con #Propiedad# que se reemplazan por los valores de cada documento. Vacío: tipo de " +
+					"documento [radicado o título]."
+			}, this._labelField.domNode, "after");
+
 			this._statusField = new Select({
 				options: [ { label: "Activa", value: "ACTIVE" }, { label: "Inactiva", value: "INACTIVE" } ],
 				value: this.query.status || "ACTIVE"
@@ -182,6 +203,7 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 				this._projectField.set("disabled", false);
 				if (this._association) {
 					this._pathField.set("value", QuerySerializer.fromGroupingConfig(this._association.config));
+					this._labelField.set("value", QuerySerializer.getLabelPattern(this._association.config));
 				}
 				this._saveButton.set("disabled", this._invalid);
 			}), lang.hitch(this, function(error) {
@@ -193,9 +215,20 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 		_onSave: function() {
 			var nameValid = this._nameField.validate();
 			var pathValid = this._pathField.validate();
+			var labelValid = this._labelField.validate();
 			var projectId = Number(this._projectField.get("value"));
 			if (!nameValid || !pathValid || !projectId) {
 				this.setMessage("Complete los campos obligatorios.", "error");
+				return;
+			}
+			if (!labelValid) {
+				this.setMessage(this._labelField.invalidMessage, "error");
+				return;
+			}
+			var groupingConfig = QuerySerializer.toGroupingConfig(this._pathField.get("value"), this._labelField.get("value"));
+			if (groupingConfig.length > MAX_GROUPING_CONFIG) {
+				this.setMessage("La ruta de agrupación y el nombre del documento suman " + groupingConfig.length +
+					" caracteres y el servicio admite " + MAX_GROUPING_CONFIG + ". Acórtelos.", "error");
 				return;
 			}
 			this._saveButton.set("disabled", true);
@@ -208,7 +241,6 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 				config: this._config,
 				status: this._statusField.get("value")
 			};
-			var groupingConfig = QuerySerializer.toGroupingConfig(this._pathField.get("value"));
 			var savedQuery;
 
 			// 1. La consulta.

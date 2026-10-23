@@ -274,8 +274,8 @@ public class DocumentPropertiesService extends PluginService {
 		return value.toString();
 	}
 
-	// Recorre también los grupos anidados de la lista de opciones.
-	private static String choiceDisplayName(com.filenet.api.collection.ChoiceList choices, Object value) {
+	// Recorre también los grupos anidados de la lista de opciones (también la usa ExecuteQueriesService).
+	static String choiceDisplayName(com.filenet.api.collection.ChoiceList choices, Object value) {
 		if (choices == null) {
 			return null;
 		}
