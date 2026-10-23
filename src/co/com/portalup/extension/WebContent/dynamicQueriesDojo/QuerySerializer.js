@@ -575,6 +575,25 @@ function(array, SearchTemplate) {
 			return "{ vnRoot: \"" + folders.join(",") + "\" }";
 		},
 
+		/**
+		 * Error de una ruta de agrupación o null si es válida: al menos una carpeta, sin comillas (va dentro de vnRoot) y
+		 * cada # como parte de una propiedad del documento #NombreSimbolico#, que ExecuteQueriesService reemplaza por
+		 * su valor en cada documento (DocumentTree.resolvePath).
+		 */
+		validateGroupingPath: function(path) {
+			path = String(path || "");
+			if (!/[^,\s]/.test(path)) {
+				return "Escriba al menos una carpeta.";
+			}
+			if (path.indexOf("\"") >= 0) {
+				return "La ruta no puede llevar comillas.";
+			}
+			if (path.replace(/#[A-Za-z_][A-Za-z0-9_]*#/g, "").indexOf("#") >= 0) {
+				return "Escriba las propiedades como #NombreSimbolico# (letras, dígitos y _, sin espacios).";
+			}
+			return null;
+		},
+
 		/** Inverso de toGroupingConfig; una config sin vnRoot (guardada antes como texto libre) se devuelve tal cual. */
 		fromGroupingConfig: function(config) {
 			var match = /vnRoot\s*:\s*"([^"]*)"/.exec(config || "");

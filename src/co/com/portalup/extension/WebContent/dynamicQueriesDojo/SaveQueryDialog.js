@@ -91,16 +91,28 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 			this._addRow(table, "Proyecto:", this._projectField, true);
 
 			// Carpetas en las que se agrupan los resultados, separadas por comas; sin comillas porque van dentro de vnRoot.
+			// Una carpeta #Propiedad# agrupa por el valor de esa propiedad de cada documento.
 			this._pathField = new ValidationTextBox({
 				required: true,
 				trim: true,
 				propercase: false,
 				maxLength: MAX_GROUPING_CONFIG - 20,
-				regExp: '[^"]*[^",\\s][^"]*',
 				invalidMessage: "Escriba las carpetas separadas por comas, sin comillas.",
-				placeHolder: "Expediente Afiliado,Pensión Voluntaria,Afiliaciones"
+				placeHolder: "Expediente Afiliado,Pensión Voluntaria,Afiliaciones,#NroRadicado#",
+				validator: function(value) {
+					var error = QuerySerializer.validateGroupingPath(value);
+					if (error) {
+						this.invalidMessage = error;
+					}
+					return !error;
+				}
 			});
 			this._addRow(table, "Ruta de agrupación:", this._pathField, true);
+			domConstruct.create("div", {
+				"class": "dqConfigHint",
+				textContent: "Carpetas separadas por comas. Con #Propiedad# (nombre simbólico de una propiedad de la clase) " +
+					"los documentos se agrupan por su valor."
+			}, this._pathField.domNode, "after");
 
 			this._statusField = new Select({
 				options: [ { label: "Activa", value: "ACTIVE" }, { label: "Inactiva", value: "INACTIVE" } ],

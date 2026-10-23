@@ -108,6 +108,12 @@
 	display: none !important;
 }
 
+/* Engranaje "Valores avanzados" de cada fila de criterios (optionNode de AttributeDefinitionWidget): con CSS porque
+   ICN crea una fila por cada propiedad que se añade, también dentro de los grupos */
+.dqPane .attributeDefintionWidget .optionIcon {
+	display: none !important;
+}
+
 /* Diálogo "Ver JSON": los diálogos se insertan fuera de .dqPane, por eso usan su propia clase */
 .dqJsonDialog .dqJsonContent {
 	width: 640px;
