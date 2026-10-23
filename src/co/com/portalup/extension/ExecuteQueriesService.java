@@ -4,10 +4,14 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.security.auth.Subject;
 import javax.servlet.http.HttpServletRequest;
@@ -15,7 +19,9 @@ import javax.servlet.http.HttpServletResponse;
 
 import com.filenet.api.collection.IndependentObjectSet;
 import com.filenet.api.core.Document;
+import com.filenet.api.core.Factory;
 import com.filenet.api.core.ObjectStore;
+import com.filenet.api.core.RetrievingBatch;
 import com.filenet.api.property.FilterElement;
 import com.filenet.api.property.Properties;
 import com.filenet.api.property.PropertyFilter;
@@ -33,7 +39,8 @@ import com.ibm.json.java.JSONObject;
  * carpetas, como /portalUpApp/api/documents/queryContent de la consulta general (DocumentTree).
  *
  * Cuerpo (POST): { queries: [ { name, cesql, config } ] }, con cesql ya con los comodines reemplazados
- * (QuerySerializer.fillParameters) y config la ruta de agrupación de la asociación ({ vnRoot: "A,B,C" }). Las consultas
+ * (QuerySerializer.fillParameters) y config la ruta de agrupación de la asociación ({ vnRoot: "A,B,C" }, que puede
+ * llevar propiedades del documento como #Nombre#: ver DocumentTree.resolvePath). Las consultas
  * corren en el repositorio configurado para el plug-in con la sesión de P8 del usuario, así que solo encuentran lo que
  * él puede ver; solo se aceptan SELECT.
  *
@@ -50,8 +57,8 @@ public class ExecuteQueriesService extends PluginService {
 
 	/** Ejecuta un CE SQL; interfaz para poder probar handle sin ICN ni P8. */
 	interface Executor {
-		/** Documentos del CE SQL (id y propiedades de DocumentTree.LABEL_PROPERTIES), hasta max. */
-		List<Map<String, Object>> run(String cesql, int max) throws Exception;
+		/** Documentos del CE SQL (Id y las propiedades indicadas que tenga cada uno), hasta max. */
+		List<Map<String, Object>> run(String cesql, int max, Collection<String> properties) throws Exception;
 	}
 
 	public String getId() {
@@ -118,14 +125,18 @@ public class ExecuteQueriesService extends PluginService {
 				continue;
 			}
 			List<String> path = DocumentTree.parseConfig(string(query.get("config")));
+			// Las del rótulo y las de la ruta de agrupación (#Nombre#).
+			Set<String> properties = new LinkedHashSet<String>(Arrays.asList(DocumentTree.LABEL_PROPERTIES));
+			properties.addAll(DocumentTree.pathProperties(path));
 			try {
-				List<Map<String, Object>> documents = executor.run(cesql, MAX_RESULTS + 1);
+				List<Map<String, Object>> documents = executor.run(cesql, MAX_RESULTS + 1, properties);
 				if (documents.size() > MAX_RESULTS) {
 					documents = documents.subList(0, MAX_RESULTS);
 					truncated.add(name);
 				}
 				for (Map<String, Object> document : documents) {
-					results.add(new DocumentTree.Result(repositoryId, string(document.get("Id")), path, document));
+					results.add(new DocumentTree.Result(repositoryId, string(document.get("Id")),
+							DocumentTree.resolvePath(path, document), document));
 				}
 			} catch (Exception e) {
 				failures.add(queryFailure(name, e.getMessage()));
@@ -145,16 +156,18 @@ public class ExecuteQueriesService extends PluginService {
 	/** Ejecuta en el object store del repositorio con la sesión de P8 del usuario conectado a ICN. */
 	private static Executor p8Executor(final PluginServiceCallbacks callbacks, final String repositoryId) {
 		return new Executor() {
-			public List<Map<String, Object>> run(String cesql, int max) {
+			public List<Map<String, Object>> run(String cesql, int max, Collection<String> properties) {
 				Subject subject = callbacks.getP8Subject(repositoryId);
 				ObjectStore objectStore = callbacks.getP8ObjectStore(repositoryId);
 				if (subject == null || objectStore == null) {
 					throw new IllegalStateException("El usuario no tiene sesión en el repositorio " + repositoryId + ".");
 				}
-				// Las propiedades del rótulo además de las del SELECT (Id, DocumentTitle); las que la clase no tiene no
-				// vienen, sin error (agregarlas al SELECT, como hace la consulta general, falla en esas clases).
+				// Las propiedades del rótulo y de la ruta además de las del SELECT (Id, DocumentTitle); las que la clase no
+				// tiene no vienen, sin error (agregarlas al SELECT, como hace la consulta general, falla en esas clases).
+				// fetchObjects ignora este filtro (solo devuelve las del SELECT, verificado en el ambiente de pruebas), así
+				// que se piden después con un RetrievingBatch.
 				StringBuilder names = new StringBuilder("Id");
-				for (String name : DocumentTree.LABEL_PROPERTIES) {
+				for (String name : properties) {
 					names.append(' ').append(name);
 				}
 				PropertyFilter filter = new PropertyFilter();
@@ -164,14 +177,19 @@ public class ExecuteQueriesService extends PluginService {
 				userContext.pushSubject(subject);
 				try {
 					IndependentObjectSet objects = new SearchScope(objectStore).fetchObjects(new SearchSQL(cesql),
-							Integer.valueOf(PAGE_SIZE), filter, Boolean.TRUE);
-					List<Map<String, Object>> documents = new ArrayList<Map<String, Object>>();
+							Integer.valueOf(PAGE_SIZE), null, Boolean.TRUE);
+					List<Document> found = new ArrayList<Document>();
 					Iterator<?> iterator = objects.iterator();
-					while (iterator.hasNext() && documents.size() < max) {
+					while (iterator.hasNext() && found.size() < max) {
 						Object object = iterator.next();
 						if (object instanceof Document) {
-							documents.add(properties((Document) object));
+							found.add((Document) object);
 						}
+					}
+					fetchProperties(objectStore, found, filter);
+					List<Map<String, Object>> documents = new ArrayList<Map<String, Object>>();
+					for (Document document : found) {
+						documents.add(values(document, properties));
 					}
 					return documents;
 				} finally {
@@ -181,11 +199,26 @@ public class ExecuteQueriesService extends PluginService {
 		};
 	}
 
-	private static Map<String, Object> properties(Document document) {
+	/**
+	 * Trae las propiedades del filtro a los documentos, en lotes de PAGE_SIZE (un viaje a P8 por lote). Un documento
+	 * que falla se queda con las del SELECT.
+	 */
+	private static void fetchProperties(ObjectStore objectStore, List<Document> documents, PropertyFilter filter) {
+		for (int start = 0; start < documents.size(); start += PAGE_SIZE) {
+			RetrievingBatch batch = RetrievingBatch.createRetrievingBatchInstance(
+					Factory.Domain.getInstance(objectStore.getConnection(), null));
+			for (Document document : documents.subList(start, Math.min(start + PAGE_SIZE, documents.size()))) {
+				batch.add(document, filter);
+			}
+			batch.retrieveBatch();
+		}
+	}
+
+	private static Map<String, Object> values(Document document, Collection<String> names) {
 		Map<String, Object> values = new HashMap<String, Object>();
 		values.put("Id", document.get_Id().toString());
 		Properties properties = document.getProperties();
-		for (String name : DocumentTree.LABEL_PROPERTIES) {
+		for (String name : names) {
 			if (properties.isPropertyPresent(name)) {
 				values.put(name, properties.getObjectValue(name));
 			}

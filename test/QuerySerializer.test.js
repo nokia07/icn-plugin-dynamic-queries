@@ -195,6 +195,15 @@ assert.strictEqual(S.toGroupingConfig(" Expediente Afiliado, Pensión Voluntaria
 assert.strictEqual(S.fromGroupingConfig('{ vnRoot: "Expediente Afiliado,Pensión Voluntaria,Afiliaciones" }'), "Expediente Afiliado,Pensión Voluntaria,Afiliaciones");
 assert.strictEqual(S.fromGroupingConfig("ruta/antigua"), "ruta/antigua");
 assert.strictEqual(S.fromGroupingConfig(null), "");
+// Propiedades del documento en la ruta (#Nombre#)
+assert.strictEqual(S.validateGroupingPath("Expediente Afiliado,Pensión Voluntaria,Afiliaciones,#NroRadicado#"), null);
+assert.strictEqual(S.validateGroupingPath("Radicado #NroRadicado#,#Fecha_1#"), null);
+assert.strictEqual(S.toGroupingConfig("Afiliaciones, #NroRadicado# "), '{ vnRoot: "Afiliaciones,#NroRadicado#" }');
+assert.ok(/al menos una carpeta/.test(S.validateGroupingPath(" , ")));
+assert.ok(/comillas/.test(S.validateGroupingPath('A,"B"')));
+["A,#NroRadicado", "A,#Nro Radicado#", "A,##", "A,#1Nro#", "A,#Nro#Otro#"].forEach(function(path) {
+  assert.ok(/#NombreSimbolico#/.test(S.validateGroupingPath(path)), path);
+});
 // 15. Tamaño: el registro de ejemplo de CG_CFG_QUERY (4 condiciones, 2 comodines) como lo arma serialize (sin
 // visualización de resultados, raíz con subcarpetas): 1128 caracteres antes de compactar
 st = base(); st.resultsDisplay = null; st.contentClass = { id: "Afiliaciones", name: "Afiliaciones" }; st.includeSubclasses = false;
@@ -254,4 +263,4 @@ assert.deepStrictEqual(S.getWildcards(r.definition), st.parameters);
 assert.deepStrictEqual(S.sortParameters([{ name: "x" }, { name: "y", order: 3 }, { name: "z" }, { name: "w", order: 1 }]).map(p => p.name), ["w", "y", "x", "z"]);
 st.parameters = { "A#1": { name: "A", order: 1.5 } };
 assert.ok(/debe ser un entero mayor que 0/.test(S.build(st).errors[0]));
-console.log("OK: 19 casos (config del ejemplo: " + size + " caracteres)");
+console.log("OK: 20 casos (config del ejemplo: " + size + " caracteres)");

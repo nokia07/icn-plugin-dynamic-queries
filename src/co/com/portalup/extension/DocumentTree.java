@@ -1,8 +1,14 @@
 package co.com.portalup.extension;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -13,7 +19,9 @@ import com.ibm.json.java.JSONObject;
  * Árbol de resultados de "Resultados de consultas", armado como DocumentTreeBuilder de la consulta general
  * (Prote_ConsGral, /portalUpApp/api/documents/queryContent): cada consulta agrupa sus documentos en las carpetas
  * virtuales de su config (DSCONFIG de CG_CFG_QUERY, aquí la config de la asociación proyecto–consulta) y las carpetas
- * con el mismo nombre en el mismo nivel se fusionan. La respuesta tiene la misma forma, la que lee
+ * con el mismo nombre en el mismo nivel se fusionan. Una carpeta puede llevar propiedades del documento como #Nombre#
+ * (p. ej. "Afiliaciones,#NroRadicado#"): se reemplazan por su valor en cada documento (resolvePath), así que los
+ * documentos se agrupan por esa propiedad. La respuesta tiene la misma forma, la que lee
  * DQResults.buildTreeData: [ { text, type: "Virtual", index, data, children: [ carpeta | documento ] } ].
  *
  * Sin dependencias de P8 ni de ICN, para poder probarla fuera del servidor.
@@ -42,6 +50,9 @@ final class DocumentTree {
 
 	private static final Pattern VN_ROOT_STRING = Pattern.compile("vnRoot\\s*:\\s*\"([^\"]*)\"");
 	private static final Pattern VN_ROOT_NAME = Pattern.compile("name\\s*:\\s*\"([^\"]*)\"");
+	/** Propiedad del documento dentro de la ruta de agrupación: #NombreSimbolico#. */
+	private static final Pattern PATH_PROPERTY = Pattern.compile("#([A-Za-z_][A-Za-z0-9_]*)#");
+	private static final String DATE_PATTERN = "dd/MM/yyyy";
 	private static final Pattern EXTENSION = Pattern.compile("\\.([a-zA-Z0-9]+)$");
 
 	private int index;
@@ -72,6 +83,41 @@ final class DocumentTree {
 			}
 		}
 		return path;
+	}
+
+	/** Propiedades (#Nombre#) que usa la ruta, sin repetir y en orden de aparición. */
+	static Set<String> pathProperties(List<String> path) {
+		Set<String> names = new LinkedHashSet<String>();
+		for (String folder : path) {
+			Matcher matcher = PATH_PROPERTY.matcher(folder);
+			while (matcher.find()) {
+				names.add(matcher.group(1));
+			}
+		}
+		return names;
+	}
+
+	/**
+	 * Ruta de un documento: cada #Nombre# se reemplaza por el valor de esa propiedad (fechas dd/MM/yyyy, listas
+	 * separadas por "; "), o por "(Sin Nombre)" si el documento no la tiene o está vacía. Las comas del valor se cambian
+	 * por ";" porque el cliente separa en carpetas por comas (DQResults.buildTreeData).
+	 */
+	static List<String> resolvePath(List<String> path, Map<String, Object> properties) {
+		List<String> resolved = new ArrayList<String>(path.size());
+		for (String folder : path) {
+			Matcher matcher = PATH_PROPERTY.matcher(folder);
+			StringBuffer name = new StringBuffer();
+			while (matcher.find()) {
+				String value = format(properties.get(matcher.group(1))).replace(',', ';');
+				if (value.isEmpty()) {
+					value = "(Sin " + matcher.group(1) + ")";
+				}
+				matcher.appendReplacement(name, Matcher.quoteReplacement(value));
+			}
+			matcher.appendTail(name);
+			resolved.add(name.toString());
+		}
+		return resolved;
 	}
 
 	/** Árbol de los resultados, en el orden de las consultas y de los documentos de cada una. */
@@ -205,6 +251,29 @@ final class DocumentTree {
 			return "mime_txt";
 		}
 		return "Document";
+	}
+
+	private static String format(Object value) {
+		if (value == null) {
+			return "";
+		}
+		if (value instanceof Calendar) {
+			value = ((Calendar) value).getTime();
+		}
+		if (value instanceof Date) {
+			return new SimpleDateFormat(DATE_PATTERN).format((Date) value);
+		}
+		if (value instanceof Collection) {
+			StringBuilder joined = new StringBuilder();
+			for (Object item : (Collection<?>) value) {
+				String text = format(item);
+				if (!text.isEmpty()) {
+					joined.append(joined.length() > 0 ? "; " : "").append(text);
+				}
+			}
+			return joined.toString();
+		}
+		return value.toString().trim();
 	}
 
 	private static String text(Map<String, Object> properties, String name) {
