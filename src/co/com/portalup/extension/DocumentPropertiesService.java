@@ -1,6 +1,8 @@
 package co.com.portalup.extension;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -54,11 +56,12 @@ import com.ibm.json.java.JSONObject;
  * Cuerpo (POST): { documentId }. El documento se lee en el repositorio configurado para el plug-in con la sesión de P8
  * del usuario, así que solo ve lo que él puede ver; storage_name y file_key salen del documento, no de la solicitud.
  *
- * Si file_key es multivalor (documentos de Imagine: un objeto de S3 por página) y el documento está en su versión 1, el
- * contenido no se descarga: se compone con S3Composer y se devuelve composed (URL prefirmada del PDF, que abre el
- * navegador). Si la composición no responde en el timeout configurado, composePending y fileError (sigue en proceso);
- * con { compose: false } en la solicitud no se vuelve a pedir (el navegador ya espera esa composición) y la respuesta es
- * la misma. Desde la versión 2 el PDF compuesto ya está en FileNet y el documento se muestra como cualquier otro (s3
+ * Si file_key_multivalue tiene valor (documentos de Imagine: un objeto de S3 por página) y el documento está en su
+ * versión 1, se compone con S3Composer (otro servicio que el de file_key, con storage_name como bucket), el servidor
+ * descarga el PDF compuesto de la URL prefirmada y lo devuelve en file (base64, como los de file_key) con composed
+ * (datos de la composición). Si la composición no responde en el timeout configurado, composePending y fileError (sigue
+ * en proceso); con { compose: false } en la solicitud no se vuelve a pedir (el navegador ya espera esa composición) y la
+ * respuesta es la misma. Desde la versión 2 el PDF compuesto ya está en FileNet y el documento se muestra como cualquier otro (s3
  * false); como la versión 2 tiene otro Id, si se pidió la 1 y la serie ya tiene una liberada posterior, releasedId es la
  * que hay que mostrar.
  *
@@ -66,7 +69,7 @@ import com.ibm.json.java.JSONObject;
  * de la serie: el navegador lo pregunta periódicamente mientras espera una composición.
  *
  * Respuesta, siempre HTTP 200: { ok: true, data: { properties: [ { name, label, value } ], s3, mimeType, file, composed:
- * { url, expiresInSeconds, pages, sizeBytes, reused }, composePending, fileError } } (properties en el orden de la
+ * { pages, sizeBytes, reused }, composePending, releasedId, fileError } } (properties en el orden de la
  * clase; file, composed, composePending y fileError solo si s3) o { ok: false, error: { status, code, message } }. Si la
  * descarga o la composición fallan se devuelven las propiedades con fileError.
  */
@@ -97,6 +100,8 @@ public class DocumentPropertiesService extends PluginService {
 
 	static final String FILE_KEY = "file_key";
 	static final String STORAGE_NAME = "storage_name";
+	/** Objetos de S3 de un documento de Imagine (uno por página), los que compone la Lambda (S3Composer). */
+	static final String FILE_KEY_MULTIVALUE = "file_key_multivalue";
 
 	private static final Pattern GUID = Pattern.compile("^\\{?[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\\}?$");
 	private static final String DATE_PATTERN = "dd/MM/yyyy";
@@ -113,7 +118,7 @@ public class DocumentPropertiesService extends PluginService {
 		final String name;
 		final String label;
 		final String value;
-		/** Valor sin formatear para el tipo MIME y la descarga (texto o List de textos), o null. */
+		/** Valor sin formatear para el tipo MIME y la descarga (texto; List de textos solo en file_key_multivalue), o null. */
 		final Object raw;
 
 		Property(String name, String label, String value, Object raw) {
@@ -159,9 +164,11 @@ public class DocumentPropertiesService extends PluginService {
 		String download(String storageName, String fileKey) throws Exception;
 	}
 
-	/** Compone en un PDF los objetos de S3 de un documento (S3Composer). */
+	/** Compone en un PDF los objetos de S3 de un documento y lo descarga en base64 (S3Composer). */
 	interface DocumentComposer {
 		S3Composer.ComposedDocument compose(String storageName, List<String> objects, String documentId) throws Exception;
+
+		String download(String documentUrl) throws Exception;
 	}
 
 	public String getId() {
@@ -176,10 +183,11 @@ public class DocumentPropertiesService extends PluginService {
 			JSONObject config = PluginConfiguration.parse(callbacks.loadConfiguration());
 			String repositoryId = PluginConfiguration.get(config, PluginConfiguration.REPOSITORY_ID);
 			String downloadUrl = PluginConfiguration.get(config, PluginConfiguration.S3_DOWNLOAD_URL);
-			String apiKey = PluginConfiguration.get(config, PluginConfiguration.S3_API_KEY);
 			result = handle(ExecuteQueriesService.readBody(request),
 					repositoryId.length() == 0 ? null : p8Reader(callbacks, repositoryId),
-					downloadUrl.length() == 0 ? null : httpDownloader(downloadUrl, apiKey), composer(config, downloadUrl, apiKey));
+					downloadUrl.length() == 0 ? null
+							: httpDownloader(downloadUrl, PluginConfiguration.get(config, PluginConfiguration.S3_API_KEY)),
+					composer(config));
 			Object error = result.get("data") instanceof JSONObject ? ((JSONObject) result.get("data")).get("fileError") : null;
 			if (error != null) {
 				logger.logWarning(this, "execute", "Contenido S3 no disponible: " + error);
@@ -193,8 +201,13 @@ public class DocumentPropertiesService extends PluginService {
 		ExecuteQueriesService.write(response, result);
 	}
 
-	/** S3Composer si están configurados el servicio de S3 y las credenciales de Azure; si no, null. */
-	private static DocumentComposer composer(JSONObject config, String url, String apiKey) {
+	/**
+	 * S3Composer si están configurados el servicio de composición y las credenciales de Azure; si no, null. Es otro
+	 * servicio que el de descarga de file_key (S3_DOWNLOAD_URL), aunque comparta la URL base.
+	 */
+	private static DocumentComposer composer(JSONObject config) {
+		String url = PluginConfiguration.get(config, PluginConfiguration.COMPOSE_URL);
+		String apiKey = PluginConfiguration.get(config, PluginConfiguration.COMPOSE_API_KEY);
 		String tokenUrl = PluginConfiguration.get(config, PluginConfiguration.AZURE_TOKEN_URL);
 		String clientId = PluginConfiguration.get(config, PluginConfiguration.AZURE_CLIENT_ID);
 		String clientSecret = PluginConfiguration.get(config, PluginConfiguration.AZURE_CLIENT_SECRET);
@@ -267,13 +280,10 @@ public class DocumentPropertiesService extends PluginService {
 			item.put("label", property.label);
 			item.put("value", property.value);
 			list.add(item);
-			if (property.raw instanceof List) {
-				// Para el tipo MIME y la detección de S3 basta el primer valor.
-				List<String> values = strings((List<?>) property.raw);
-				raw.put(property.name, values.isEmpty() ? null : values.get(0));
-				if (property.name.equals(FILE_KEY)) {
-					fileKeys = values;
-				}
+			if (property.name.equals(FILE_KEY_MULTIVALUE)) {
+				// No entra en raw: el tipo MIME y la descarga de file_key siguen como en la consulta general.
+				fileKeys = property.raw instanceof List ? strings((List<?>) property.raw)
+						: property.raw == null ? null : strings(Arrays.asList(property.raw));
 			} else {
 				raw.put(property.name, property.raw);
 			}
@@ -284,9 +294,19 @@ public class DocumentPropertiesService extends PluginService {
 		String fileKey = text(raw.get(FILE_KEY));
 		String storageName = text(raw.get(STORAGE_NAME));
 		boolean s3 = fileKey.length() > 0 && storageName.length() > 0;
-		if (s3 && fileKeys != null) {
-			// Multivalor: desde la versión 2 el PDF compuesto ya está en FileNet.
+		if (fileKeys != null && !fileKeys.isEmpty()) {
+			// file_key_multivalor con valor: en la versión 1 se compone; desde la 2 el PDF compuesto ya está en FileNet.
 			s3 = document.majorVersion <= 1;
+			if (s3 && storageName.length() == 0) {
+				data.put("s3", Boolean.TRUE);
+				data.put("mimeType", "application/pdf");
+				data.put("fileError", "El documento tiene " + FILE_KEY_MULTIVALUE + " pero no " + STORAGE_NAME
+						+ " (el bucket de S3): no se puede componer.");
+				JSONObject result = new JSONObject();
+				result.put("ok", Boolean.TRUE);
+				result.put("data", data);
+				return result;
+			}
 			if (s3) {
 				// Un resultado de antes de que el workflow creara la versión 2 (el árbol tiene el Id de la 1).
 				try {
@@ -309,17 +329,27 @@ public class DocumentPropertiesService extends PluginService {
 			} else if (composer == null) {
 				data.put("mimeType", "application/pdf");
 				data.put("fileError",
-						"El plug-in no tiene configurado el servicio de composición de documentos (URL de S3 y credenciales de Azure).");
+						"El plug-in no tiene configurado el servicio de composición de documentos (URL y credenciales de Azure).");
 			} else {
 				data.put("mimeType", "application/pdf");
+				S3Composer.ComposedDocument composed = null;
 				try {
-					data.put("composed", composer.compose(storageName, fileKeys, braced(documentId)).toJson());
+					composed = composer.compose(storageName, fileKeys, braced(documentId));
+					data.put("composed", composed.toJson());
 				} catch (S3Composer.ComposePendingException e) {
 					data.put("composePending", Boolean.TRUE);
 					data.put("fileError", COMPOSE_PENDING_MESSAGE);
 				} catch (Exception e) {
 					data.put("fileError", "No fue posible componer el documento (" + storageName + ", " + fileKeys.size()
 							+ " objetos): " + e.getMessage());
+				}
+				// El PDF lo descarga el servidor de ICN: el navegador no tiene por qué ver S3.
+				if (composed != null) {
+					try {
+						data.put("file", composer.download(composed.url));
+					} catch (Exception e) {
+						data.put("fileError", "El documento se compuso pero no fue posible descargar el PDF: " + e.getMessage());
+					}
 				}
 			}
 			JSONObject result = new JSONObject();
@@ -376,7 +406,9 @@ public class DocumentPropertiesService extends PluginService {
 						Object value = properties.getObjectValue(name);
 						result.add(new Property(name, description.get_DisplayName(),
 								format(value, description.get_ChoiceList(), type),
-								value instanceof String ? value : value instanceof StringList ? strings((StringList) value) : null));
+								value instanceof String ? value
+										: value instanceof StringList && name.equals(FILE_KEY_MULTIVALUE) ? strings((StringList) value)
+										: null));
 					}
 					Integer majorVersion = document.get_MajorVersionNumber();
 					return new DocumentData(result, majorVersion == null ? 0 : majorVersion.intValue());
@@ -485,7 +517,7 @@ public class DocumentPropertiesService extends PluginService {
 					if (status < 200 || status >= 300) {
 						throw new IOException("HTTP " + status);
 					}
-					String body = Http.read(connection.getInputStream()).trim();
+					String body = read(connection.getInputStream()).trim();
 					if (body.length() >= 2 && body.startsWith("\"") && body.endsWith("\"")) {
 						body = body.substring(1, body.length() - 1);
 					}
@@ -500,7 +532,21 @@ public class DocumentPropertiesService extends PluginService {
 		};
 	}
 
-	/** Valores no vacíos, en su orden (el de las páginas en file_key). */
+	private static String read(InputStream input) throws IOException {
+		try {
+			ByteArrayOutputStream output = new ByteArrayOutputStream();
+			byte[] buffer = new byte[8192];
+			int read;
+			while ((read = input.read(buffer)) != -1) {
+				output.write(buffer, 0, read);
+			}
+			return output.toString("UTF-8");
+		} finally {
+			input.close();
+		}
+	}
+
+	/** Valores no vacíos, en su orden (el de las páginas en file_key_multivalue). */
 	static List<String> strings(java.util.Collection<?> values) {
 		List<String> result = new ArrayList<String>();
 		for (Object value : values) {

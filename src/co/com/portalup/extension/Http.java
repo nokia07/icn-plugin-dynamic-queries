@@ -4,12 +4,16 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.Map;
 
-/** POST mínimo con HttpURLConnection para los servicios que llama el servidor de ICN (AzureTokenProvider, S3Composer). */
+/**
+ * POST y GET mínimos con HttpURLConnection para la composición de documentos (AzureTokenProvider, S3Composer). La
+ * descarga de file_key (DocumentPropertiesService.httpDownloader) no los usa.
+ */
 final class Http {
 
 	/** Estado y cuerpo de una respuesta (también las de error). */
@@ -68,15 +72,52 @@ final class Http {
 		}
 	}
 
+	/**
+	 * GET de un archivo binario (p. ej. una URL prefirmada de S3), hasta maxBytes; IOException si la respuesta no es 2xx
+	 * o pasa el límite.
+	 */
+	static byte[] getBytes(String url, int connectMs, int readMs, long maxBytes) throws IOException {
+		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+		try {
+			connection.setRequestMethod("GET");
+			connection.setConnectTimeout(connectMs);
+			connection.setReadTimeout(readMs);
+			int status = connection.getResponseCode();
+			if (status < 200 || status >= 300) {
+				InputStream error = connection.getErrorStream();
+				String body = error == null ? "" : read(error).trim();
+				throw new IOException("HTTP " + status + (body.length() == 0 ? ""
+						: ": " + (body.length() > 200 ? body.substring(0, 200) + "…" : body)));
+			}
+			if (connection.getContentLengthLong() > maxBytes) {
+				throw new IOException("el archivo pesa " + connection.getContentLengthLong() + " bytes (máximo " + maxBytes + ")");
+			}
+			return readBytes(connection.getInputStream(), maxBytes);
+		} finally {
+			connection.disconnect();
+		}
+	}
+
 	static String read(InputStream input) throws IOException {
+		try {
+			return new String(readBytes(input, Long.MAX_VALUE), "UTF-8");
+		} catch (UnsupportedEncodingException e) {
+			throw new IOException(e);
+		}
+	}
+
+	private static byte[] readBytes(InputStream input, long maxBytes) throws IOException {
 		try {
 			ByteArrayOutputStream output = new ByteArrayOutputStream();
 			byte[] buffer = new byte[8192];
 			int read;
 			while ((read = input.read(buffer)) != -1) {
 				output.write(buffer, 0, read);
+				if (output.size() > maxBytes) {
+					throw new IOException("el archivo pasa el máximo de " + maxBytes + " bytes");
+				}
 			}
-			return output.toString("UTF-8");
+			return output.toByteArray();
 		} finally {
 			input.close();
 		}

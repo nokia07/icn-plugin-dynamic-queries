@@ -15,7 +15,7 @@ define([
 		 * @name dynamicQueriesDojo.ConfigurationPane
 		 * @class Configuración del plug-in: repositorio de las consultas, URL del microservicio de DQ, grupos con acceso
 		 *        al diseñador, servicio de descarga de los documentos en S3 (URL y API key) y composición de los que tienen
-		 *        file_key multivalor (credenciales de Azure y timeout).
+		 *        file_key_multivalue (URL y API key del servicio de composición, credenciales de Azure y timeout).
 		 *        La lee co.com.portalup.extension.PluginConfiguration en el servidor; los nombres deben coincidir.
 		 * @augments ecm.widget.admin.PluginConfigurationPane
 		 */
@@ -42,6 +42,8 @@ define([
 			this.designerGroupsField.set("value", values.designerGroups || "", false);
 			this.s3DownloadUrlField.set("value", values.s3DownloadUrl || "", false);
 			this.s3ApiKeyField.set("value", values.s3ApiKey || "", false);
+			this.composeUrlField.set("value", values.composeUrl || "", false);
+			this.composeApiKeyField.set("value", values.composeApiKey || "", false);
 			this.azureTokenUrlField.set("value", values.azureTokenUrl || "", false);
 			this.azureClientIdField.set("value", values.azureClientId || "", false);
 			this.azureClientSecretField.set("value", values.azureClientSecret || "", false);
@@ -78,6 +80,8 @@ define([
 					{ name: "designerGroups", value: this.designerGroupsField.get("value") },
 					{ name: "s3DownloadUrl", value: this.s3DownloadUrlField.get("value") },
 					{ name: "s3ApiKey", value: this.s3ApiKeyField.get("value") },
+					{ name: "composeUrl", value: this.composeUrlField.get("value") },
+					{ name: "composeApiKey", value: this.composeApiKeyField.get("value") },
 					{ name: "azureTokenUrl", value: this.azureTokenUrlField.get("value") },
 					{ name: "azureClientId", value: this.azureClientIdField.get("value") },
 					{ name: "azureClientSecret", value: this.azureClientSecretField.get("value") },
@@ -90,7 +94,7 @@ define([
 
 		validate: function() {
 			return !!this.repositoryIdField.get("value") && this.projectsApiUrlField.isValid() && this.s3DownloadUrlField.isValid()
-				&& this.azureTokenUrlField.isValid() && this.composeTimeoutSecondsField.isValid();
+				&& this.composeUrlField.isValid() && this.azureTokenUrlField.isValid() && this.composeTimeoutSecondsField.isValid();
 		}
 	});
 });

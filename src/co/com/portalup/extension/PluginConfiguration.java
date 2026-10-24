@@ -39,8 +39,16 @@ public final class PluginConfiguration {
 	/** Valor de la cabecera x-api-key para S3_DOWNLOAD_URL. Nunca se envía al navegador (salvo a la herramienta de administración). */
 	public static final String S3_API_KEY = "s3ApiKey";
 	/**
-	 * Token de Azure AD que exige el servicio de composición (S3Composer: POST a S3_DOWNLOAD_URL con los objetos de un
-	 * file_key multivalor), flujo client_credentials del endpoint v1, p. ej.
+	 * URL del servicio que compone en un PDF los objetos de S3 de file_key_multivalue (S3Composer, POST), p. ej.
+	 * {host}/gce-alm/documentos/s3descarga/. Es otro servicio que S3_DOWNLOAD_URL aunque comparta la URL base; lo llama
+	 * el servidor de ICN.
+	 */
+	public static final String COMPOSE_URL = "composeUrl";
+	/** Valor de la cabecera x-api-key para COMPOSE_URL. Nunca se envía al navegador. */
+	public static final String COMPOSE_API_KEY = "composeApiKey";
+	/**
+	 * Token de Azure AD que exige el servicio de composición (Authorization: Bearer), flujo client_credentials del
+	 * endpoint v1, p. ej.
 	 * https://login.microsoftonline.com/{tenant}/oauth2/token. Como la API key, el secreto nunca va al navegador.
 	 */
 	public static final String AZURE_TOKEN_URL = "azureTokenUrl";

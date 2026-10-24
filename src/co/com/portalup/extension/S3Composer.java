@@ -2,6 +2,7 @@ package co.com.portalup.extension;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,18 +11,22 @@ import com.ibm.json.java.JSONArray;
 import com.ibm.json.java.JSONObject;
 
 /**
- * Composición de los documentos de Imagine en S3, cuyo file_key es multivalor (un objeto por página): POST
+ * Composición de los documentos de Imagine en S3, con un objeto por página en file_key_multivalue: POST
  * {s3DownloadUrl} con { storageName, objetos, idDocumento }, las cabeceras x-api-key y Authorization: Bearer (token de
  * AzureTokenProvider). La Lambda junta los objetos en un PDF, lo publica en S3 y responde
  * { cabeceraSalida: { codigo, tipoError, mensajeUsuario }, documento: { url, expiraEnSegundos, paginas, tamanoBytes,
- * reutilizado } }: url es una URL prefirmada (vence en minutos) que abre el navegador. Luego el PDF llega a FileNet como
+ * reutilizado } }: url es una URL prefirmada (vence en minutos) de la que el servidor de ICN descarga el PDF (download):
+ * el navegador no se conecta a S3, solo el servidor tiene visibilidad de los servicios. Luego el PDF llega a FileNet como
  * versión 2 del documento y ya no hace falta componerlo (DocumentPropertiesService).
  */
 final class S3Composer implements DocumentPropertiesService.DocumentComposer {
 
 	private static final int CONNECT_TIMEOUT_MS = 10000;
+	private static final int DOWNLOAD_READ_TIMEOUT_MS = 60000;
+	/** Tope del PDF que se descarga a memoria para enviarlo en base64 (~200 páginas de Imagine pesan unos 10 MB). */
+	static final long MAX_PDF_BYTES = 100L * 1024 * 1024;
 
-	/** Documento compuesto. */
+	/** Documento compuesto; url no se envía al navegador. */
 	static final class ComposedDocument {
 		final String url;
 		final Long expiresInSeconds;
@@ -39,8 +44,6 @@ final class S3Composer implements DocumentPropertiesService.DocumentComposer {
 
 		JSONObject toJson() {
 			JSONObject json = new JSONObject();
-			json.put("url", url);
-			json.put("expiresInSeconds", expiresInSeconds);
 			json.put("pages", pages);
 			json.put("sizeBytes", sizeBytes);
 			json.put("reused", Boolean.valueOf(reused));
@@ -89,6 +92,12 @@ final class S3Composer implements DocumentPropertiesService.DocumentComposer {
 		} catch (SocketTimeoutException e) {
 			throw new ComposePendingException(timeoutSeconds);
 		}
+	}
+
+	/** PDF de la URL prefirmada de una composición, en base64. */
+	public String download(String documentUrl) throws IOException {
+		return Base64.getEncoder().encodeToString(
+				Http.getBytes(documentUrl, CONNECT_TIMEOUT_MS, DOWNLOAD_READ_TIMEOUT_MS, MAX_PDF_BYTES));
 	}
 
 	private Http.Response post(String body, String token) throws IOException {

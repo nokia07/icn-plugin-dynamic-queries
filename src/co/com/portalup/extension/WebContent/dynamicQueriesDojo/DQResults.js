@@ -657,8 +657,8 @@ function(declare,
 		/**
 		 * Propiedades del documento en el grid y el documento en el visor: con bookmark.jsp de ICN o, si está en S3
 		 * (file_key y storage_name), su contenido en base64 decodificado en el navegador (DocumentPropertiesService lo
-		 * descarga, como /portalUpApp/api/documents/properties de la consulta general). Si file_key es multivalor, el
-		 * servidor lo compone en un PDF y el visor abre su URL prefirmada; si la composición tarda más que el timeout, se
+		 * descarga, como /portalUpApp/api/documents/properties de la consulta general). Si tiene file_key_multivalue, el
+		 * servidor lo compone en un PDF y lo devuelve en base64 como los de file_key; si la composición tarda más que el timeout, se
 		 * avisa al usuario y se espera en segundo plano (_watchComposition). name es el nombre del documento en el árbol.
 		 */
 		getDocumentProperties: function(doc, name) {
@@ -688,8 +688,6 @@ function(declare,
 				if (!data.s3) {
 					// releasedId: se eligió la versión 1 y la serie ya tiene la 2 (el PDF compuesto, con otro Id).
 					this._showIcnViewer(data.releasedId ? lang.mixin({}, doc, { objId: data.releasedId }) : doc);
-				} else if (data.composed) {
-					this._showComposedViewer(data.composed.url);
 				} else if (data.file) {
 					try {
 						this.showViewerBase64(data.file, data.mimeType || this.getMimeType(title) || "application/pdf");
@@ -712,13 +710,6 @@ function(declare,
 				console.error("DQResults: error consultando propiedades", error);
 				this._showAlert("No se pudieron consultar las propiedades del documento: " + error.message);
 			}));
-		},
-
-		// PDF compuesto en S3: la URL prefirmada ya responde application/pdf inline y vence en minutos, así que se
-		// abre de inmediato y no se guarda (la CSP de ICN permite https:).
-		_showComposedViewer: function(url) {
-			this._clearViewer();
-			domConstruct.create("iframe", { src: url, "class": "dqResultsViewerFrame" }, this.viewerNode);
 		},
 
 		/**

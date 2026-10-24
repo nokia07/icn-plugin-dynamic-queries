@@ -38,9 +38,9 @@ function(Deferred, JSON, Request) {
 	return {
 		/**
 		 * Propiedades de un documento del repositorio del plug-in, leídas con la sesión de P8 del usuario, y su contenido
-		 * si está en S3: en base64 (file) o, si file_key es multivalor, la URL prefirmada del PDF compuesto (composed).
-		 * Se resuelve con { properties: [ { name, label, value } ], s3, mimeType, file, composed: { url,
-		 * expiresInSeconds, pages, sizeBytes, reused }, composePending, releasedId, fileError } y se rechaza con
+		 * si está en S3, en base64 (file): el de file_key o, si tiene file_key_multivalue, el PDF compuesto (composed son
+		 * los datos de la composición). Se resuelve con { properties: [ { name, label, value } ], s3, mimeType, file,
+		 * composed: { pages, sizeBytes, reused }, composePending, releasedId, fileError } y se rechaza con
 		 * { code, message }. Con compose false no se pide otra composición (ya se está esperando una).
 		 */
 		getProperties: function(documentId, compose) {
