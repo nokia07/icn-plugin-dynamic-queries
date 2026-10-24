@@ -56,7 +56,8 @@
 					data-dojo-props="required:false, trim:true, propercase:false, maxLength:512, regExp:'(https?://\\S+)?', invalidMessage:'Ingrese una URL que empiece por http:// o https://', placeHolder:'https://servidor/gce-alm/documentos/s3descarga'"></div>
 				<div class="dqConfigHint">Servicio que entrega en base64 el contenido de los documentos con las propiedades
 					file_key y storage_name (en Resultados de consultas). Lo llama el servidor de ICN con
-					?storage_name=…&amp;file_key=…; vacío: esos documentos no se pueden ver.</div>
+					?storage_name=…&amp;file_key=…; vacío: esos documentos no se pueden ver. Si file_key es multivalor (una
+					página por objeto), el mismo servicio compone el PDF por POST con el token de Azure de abajo.</div>
 			</td>
 		</tr>
 		<tr>
@@ -68,6 +69,66 @@
 					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
 					data-dojo-type="ecm/widget/ValidationTextBox"
 					data-dojo-props="type:'password', required:false, trim:true, propercase:false, maxLength:512"></div>
+			</td>
+		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_azureTokenUrl">URL del token de Azure (composición):</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_azureTokenUrl" data-dojo-attach-point="azureTokenUrlField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="required:false, trim:true, propercase:false, maxLength:512, regExp:'(https://\\S+)?', invalidMessage:'Ingrese una URL que empiece por https://', placeHolder:'https://login.microsoftonline.com/{tenant}/oauth2/token'"></div>
+				<div class="dqConfigHint">Azure AD, flujo client_credentials. Con el client ID, el secreto y el resource es
+					obligatoria para ver los documentos con file_key multivalor; el servidor de ICN guarda el token hasta
+					que vence.</div>
+			</td>
+		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_azureClientId">Client ID de Azure:</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_azureClientId" data-dojo-attach-point="azureClientIdField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="required:false, trim:true, propercase:false, maxLength:256"></div>
+			</td>
+		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_azureClientSecret">Client secret de Azure:</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_azureClientSecret" data-dojo-attach-point="azureClientSecretField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="type:'password', required:false, trim:true, propercase:false, maxLength:512"></div>
+			</td>
+		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_azureResource">Resource (audiencia del token):</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_azureResource" data-dojo-attach-point="azureResourceField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="required:false, trim:true, propercase:false, maxLength:512, placeHolder:'https://proteccion.onmicrosoft.com/gestor-documental-pruebas'"></div>
+			</td>
+		</tr>
+		<tr>
+			<td class="propertyRowLabel">
+				<label for="${id}_composeTimeoutSeconds">Timeout de la composición (segundos):</label>
+			</td>
+			<td class="propertyRowValue">
+				<div id="${id}_composeTimeoutSeconds" data-dojo-attach-point="composeTimeoutSecondsField"
+					data-dojo-attach-event="onKeyUp: _onParamChange, onChange: _onParamChange"
+					data-dojo-type="ecm/widget/ValidationTextBox"
+					data-dojo-props="required:false, trim:true, maxLength:2, regExp:'([1-9]|1[0-9]|2[0-8])?', invalidMessage:'Ingrese un número entre 1 y 28', placeHolder:'10'"></div>
+				<div class="dqConfigHint">Pasado este tiempo se le avisa al usuario que el documento se sigue componiendo.
+					Máximo 28: API Gateway corta las solicitudes a los ~29 s. Vacío: 10.</div>
 			</td>
 		</tr>
 	</table>

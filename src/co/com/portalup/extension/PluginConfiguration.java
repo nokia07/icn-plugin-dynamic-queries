@@ -38,6 +38,23 @@ public final class PluginConfiguration {
 	public static final String S3_DOWNLOAD_URL = "s3DownloadUrl";
 	/** Valor de la cabecera x-api-key para S3_DOWNLOAD_URL. Nunca se envía al navegador (salvo a la herramienta de administración). */
 	public static final String S3_API_KEY = "s3ApiKey";
+	/**
+	 * Token de Azure AD que exige el servicio de composición (S3Composer: POST a S3_DOWNLOAD_URL con los objetos de un
+	 * file_key multivalor), flujo client_credentials del endpoint v1, p. ej.
+	 * https://login.microsoftonline.com/{tenant}/oauth2/token. Como la API key, el secreto nunca va al navegador.
+	 */
+	public static final String AZURE_TOKEN_URL = "azureTokenUrl";
+	public static final String AZURE_CLIENT_ID = "azureClientId";
+	public static final String AZURE_CLIENT_SECRET = "azureClientSecret";
+	/** Audiencia del token (parámetro resource), p. ej. https://proteccion.onmicrosoft.com/gestor-documental-pruebas. */
+	public static final String AZURE_RESOURCE = "azureResource";
+	/**
+	 * Segundos que se espera la composición antes de responder que sigue en proceso. Menos de 29: API Gateway corta a
+	 * los ~29 s.
+	 */
+	public static final String COMPOSE_TIMEOUT_SECONDS = "composeTimeoutSeconds";
+	public static final int DEFAULT_COMPOSE_TIMEOUT_SECONDS = 10;
+	public static final int MAX_COMPOSE_TIMEOUT_SECONDS = 28;
 
 	private PluginConfiguration() {
 	}
@@ -76,6 +93,16 @@ public final class PluginConfiguration {
 			}
 		}
 		return groups;
+	}
+
+	/** COMPOSE_TIMEOUT_SECONDS entre 1 y MAX_COMPOSE_TIMEOUT_SECONDS; el predeterminado si está vacío o no es un número. */
+	public static int getComposeTimeoutSeconds(JSONObject config) {
+		try {
+			int seconds = Integer.parseInt(get(config, COMPOSE_TIMEOUT_SECONDS));
+			return Math.max(1, Math.min(MAX_COMPOSE_TIMEOUT_SECONDS, seconds));
+		} catch (NumberFormatException e) {
+			return DEFAULT_COMPOSE_TIMEOUT_SECONDS;
+		}
 	}
 
 	/** Valor sin espacios, o "" si no está configurado. */

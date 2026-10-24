@@ -204,6 +204,16 @@ assert.ok(/comillas/.test(S.validateGroupingPath('A,"B"')));
 ["A,#NroRadicado", "A,#Nro Radicado#", "A,##", "A,#1Nro#", "A,#Nro#Otro#"].forEach(function(path) {
   assert.ok(/#NombreSimbolico#/.test(S.validateGroupingPath(path)), path);
 });
+// Patrón del nombre de los documentos (docLabel)
+assert.strictEqual(S.toGroupingConfig("A,B", " #TipoDocumento# [#NroRadicado#] "), '{ vnRoot: "A,B", docLabel: "#TipoDocumento# [#NroRadicado#]" }');
+assert.strictEqual(S.toGroupingConfig("A,B", "  "), '{ vnRoot: "A,B" }');
+assert.strictEqual(S.getLabelPattern('{ vnRoot: "A,B", docLabel: "#TipoDocumento# [#NroRadicado#]" }'), "#TipoDocumento# [#NroRadicado#]");
+assert.strictEqual(S.fromGroupingConfig('{ vnRoot: "A,B", docLabel: "x" }'), "A,B");
+assert.strictEqual(S.getLabelPattern('{ vnRoot: "A,B" }'), "");
+assert.strictEqual(S.validateLabelPattern(""), null);
+assert.strictEqual(S.validateLabelPattern("Radicado #NroRadicado#, lote #LoteUbicFisica#"), null);
+assert.ok(/comillas/.test(S.validateLabelPattern('Doc "x"')));
+assert.ok(/#NombreSimbolico#/.test(S.validateLabelPattern("Doc #Nro")));
 // 15. Tamaño: el registro de ejemplo de CG_CFG_QUERY (4 condiciones, 2 comodines) como lo arma serialize (sin
 // visualización de resultados, raíz con subcarpetas): 1128 caracteres antes de compactar
 st = base(); st.resultsDisplay = null; st.contentClass = { id: "Afiliaciones", name: "Afiliaciones" }; st.includeSubclasses = false;
@@ -263,4 +273,4 @@ assert.deepStrictEqual(S.getWildcards(r.definition), st.parameters);
 assert.deepStrictEqual(S.sortParameters([{ name: "x" }, { name: "y", order: 3 }, { name: "z" }, { name: "w", order: 1 }]).map(p => p.name), ["w", "y", "x", "z"]);
 st.parameters = { "A#1": { name: "A", order: 1.5 } };
 assert.ok(/debe ser un entero mayor que 0/.test(S.build(st).errors[0]));
-console.log("OK: 20 casos (config del ejemplo: " + size + " caracteres)");
+console.log("OK: 21 casos (config del ejemplo: " + size + " caracteres)");

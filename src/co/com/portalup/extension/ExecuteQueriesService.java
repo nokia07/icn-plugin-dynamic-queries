@@ -17,11 +17,14 @@ import javax.security.auth.Subject;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.filenet.api.admin.ChoiceList;
 import com.filenet.api.collection.IndependentObjectSet;
 import com.filenet.api.core.Document;
 import com.filenet.api.core.Factory;
 import com.filenet.api.core.ObjectStore;
 import com.filenet.api.core.RetrievingBatch;
+import com.filenet.api.meta.ClassDescription;
+import com.filenet.api.meta.PropertyDescription;
 import com.filenet.api.property.FilterElement;
 import com.filenet.api.property.Properties;
 import com.filenet.api.property.PropertyFilter;
@@ -40,7 +43,8 @@ import com.ibm.json.java.JSONObject;
  *
  * Cuerpo (POST): { queries: [ { name, cesql, config } ] }, con cesql ya con los comodines reemplazados
  * (QuerySerializer.fillParameters) y config la ruta de agrupación de la asociación ({ vnRoot: "A,B,C" }, que puede
- * llevar propiedades del documento como #Nombre#: ver DocumentTree.resolvePath). Las consultas
+ * llevar propiedades del documento como #Nombre#, ver DocumentTree.resolvePath, y el patrón del nombre de los
+ * documentos, docLabel, ver DocumentTree.resolveLabel). Las consultas
  * corren en el repositorio configurado para el plug-in con la sesión de P8 del usuario, así que solo encuentran lo que
  * él puede ver; solo se aceptan SELECT.
  *
@@ -57,7 +61,10 @@ public class ExecuteQueriesService extends PluginService {
 
 	/** Ejecuta un CE SQL; interfaz para poder probar handle sin ICN ni P8. */
 	interface Executor {
-		/** Documentos del CE SQL (Id y las propiedades indicadas que tenga cada uno), hasta max. */
+		/**
+		 * Documentos del CE SQL (Id y las propiedades indicadas que tenga cada uno; las que tienen lista de opciones,
+		 * también con su nombre visible en nombre + DocumentTree.DISPLAY_SUFFIX), hasta max.
+		 */
 		List<Map<String, Object>> run(String cesql, int max, Collection<String> properties) throws Exception;
 	}
 
@@ -124,10 +131,13 @@ public class ExecuteQueriesService extends PluginService {
 				failures.add(queryFailure(name, "La consulta no es un SELECT de CE SQL."));
 				continue;
 			}
-			List<String> path = DocumentTree.parseConfig(string(query.get("config")));
-			// Las del rótulo y las de la ruta de agrupación (#Nombre#).
+			String config = string(query.get("config"));
+			List<String> path = DocumentTree.parseConfig(config);
+			String labelPattern = DocumentTree.parseLabelPattern(config);
+			// Las del rótulo y las de la ruta de agrupación y del patrón del nombre (#Nombre#).
 			Set<String> properties = new LinkedHashSet<String>(Arrays.asList(DocumentTree.LABEL_PROPERTIES));
-			properties.addAll(DocumentTree.pathProperties(path));
+			properties.addAll(DocumentTree.patternProperties(path));
+			properties.addAll(DocumentTree.patternProperties(Arrays.asList(labelPattern)));
 			try {
 				List<Map<String, Object>> documents = executor.run(cesql, MAX_RESULTS + 1, properties);
 				if (documents.size() > MAX_RESULTS) {
@@ -136,7 +146,7 @@ public class ExecuteQueriesService extends PluginService {
 				}
 				for (Map<String, Object> document : documents) {
 					results.add(new DocumentTree.Result(repositoryId, string(document.get("Id")),
-							DocumentTree.resolvePath(path, document), document));
+							DocumentTree.resolvePath(path, document), document, DocumentTree.resolveLabel(labelPattern, document)));
 				}
 			} catch (Exception e) {
 				failures.add(queryFailure(name, e.getMessage()));
@@ -188,8 +198,9 @@ public class ExecuteQueriesService extends PluginService {
 					}
 					fetchProperties(objectStore, found, filter);
 					List<Map<String, Object>> documents = new ArrayList<Map<String, Object>>();
+					Map<String, Map<String, ChoiceList>> choiceLists = new HashMap<String, Map<String, ChoiceList>>();
 					for (Document document : found) {
-						documents.add(values(document, properties));
+						documents.add(values(document, properties, choiceLists(objectStore, document.getClassName(), choiceLists)));
 					}
 					return documents;
 				} finally {
@@ -214,16 +225,60 @@ public class ExecuteQueriesService extends PluginService {
 		}
 	}
 
-	private static Map<String, Object> values(Document document, Collection<String> names) {
+	/**
+	 * Listas de opciones de las propiedades de una clase (nombre simbólico → lista), una vez por clase en cache. Si no
+	 * se puede leer la descripción de la clase, ninguna: los valores se muestran como están guardados.
+	 */
+	private static Map<String, ChoiceList> choiceLists(ObjectStore objectStore, String className,
+			Map<String, Map<String, ChoiceList>> cache) {
+		Map<String, ChoiceList> lists = cache.get(className);
+		if (lists == null) {
+			lists = new HashMap<String, ChoiceList>();
+			try {
+				ClassDescription description = Factory.ClassDescription.fetchInstance(objectStore, className, null);
+				Iterator<?> descriptions = description.get_PropertyDescriptions().iterator();
+				while (descriptions.hasNext()) {
+					PropertyDescription property = (PropertyDescription) descriptions.next();
+					if (property.get_ChoiceList() != null) {
+						lists.put(property.get_SymbolicName(), property.get_ChoiceList());
+					}
+				}
+			} catch (RuntimeException e) {
+				// Sin nombres visibles para esta clase.
+			}
+			cache.put(className, lists);
+		}
+		return lists;
+	}
+
+	private static Map<String, Object> values(Document document, Collection<String> names, Map<String, ChoiceList> choiceLists) {
 		Map<String, Object> values = new HashMap<String, Object>();
 		values.put("Id", document.get_Id().toString());
 		Properties properties = document.getProperties();
 		for (String name : names) {
 			if (properties.isPropertyPresent(name)) {
-				values.put(name, properties.getObjectValue(name));
+				Object value = properties.getObjectValue(name);
+				values.put(name, value);
+				ChoiceList choiceList = choiceLists.get(name);
+				if (choiceList != null && value != null) {
+					values.put(name + DocumentTree.DISPLAY_SUFFIX, displayValue(value, choiceList));
+				}
 			}
 		}
 		return values;
+	}
+
+	// Nombre visible de un valor (o de cada valor de una lista) en la lista de opciones; el valor si no está en ella.
+	private static Object displayValue(Object value, ChoiceList choiceList) {
+		if (value instanceof Collection) {
+			List<Object> displayed = new ArrayList<Object>();
+			for (Object item : (Collection<?>) value) {
+				displayed.add(item == null ? null : displayValue(item, choiceList));
+			}
+			return displayed;
+		}
+		String display = DocumentPropertiesService.choiceDisplayName(choiceList.get_ChoiceValues(), value);
+		return display != null ? display : value;
 	}
 
 	/**

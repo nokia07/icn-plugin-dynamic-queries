@@ -21,25 +21,31 @@ import com.ibm.json.java.JSONObject;
  * virtuales de su config (DSCONFIG de CG_CFG_QUERY, aquí la config de la asociación proyecto–consulta) y las carpetas
  * con el mismo nombre en el mismo nivel se fusionan. Una carpeta puede llevar propiedades del documento como #Nombre#
  * (p. ej. "Afiliaciones,#NroRadicado#"): se reemplazan por su valor en cada documento (resolvePath), así que los
- * documentos se agrupan por esa propiedad. La respuesta tiene la misma forma, la que lee
+ * documentos se agrupan por esa propiedad. La config también puede traer el patrón del nombre de los documentos
+ * (docLabel: "Texto #Nombre#", resolveLabel); sin él, el rótulo es el de la consulta general (label). La respuesta tiene la misma forma, la que lee
  * DQResults.buildTreeData: [ { text, type: "Virtual", index, data, children: [ carpeta | documento ] } ].
  *
  * Sin dependencias de P8 ni de ICN, para poder probarla fuera del servidor.
  */
 final class DocumentTree {
 
-	/** Documento encontrado por una consulta; properties trae las de LABEL_PROPERTIES que tenga la clase. */
+	/**
+	 * Documento encontrado por una consulta; properties trae las de LABEL_PROPERTIES que tenga la clase. text es el
+	 * nombre del documento en el árbol, o null para el rótulo predeterminado (label).
+	 */
 	static final class Result {
 		final String objectStore;
 		final String id;
 		final List<String> path;
 		final Map<String, Object> properties;
+		final String text;
 
-		Result(String objectStore, String id, List<String> path, Map<String, Object> properties) {
+		Result(String objectStore, String id, List<String> path, Map<String, Object> properties, String text) {
 			this.objectStore = objectStore;
 			this.id = id;
 			this.path = path;
 			this.properties = properties;
+			this.text = text;
 		}
 	}
 
@@ -50,6 +56,15 @@ final class DocumentTree {
 
 	private static final Pattern VN_ROOT_STRING = Pattern.compile("vnRoot\\s*:\\s*\"([^\"]*)\"");
 	private static final Pattern VN_ROOT_NAME = Pattern.compile("name\\s*:\\s*\"([^\"]*)\"");
+	private static final Pattern VN_ROOT_ARRAY = Pattern.compile("vnRoot\"?\\s*:\\s*\\[");
+	private static final Pattern DOC_LABEL = Pattern.compile("docLabel\\s*:\\s*\"([^\"]*)\"");
+	/**
+	 * Sufijo de la clave con el nombre visible de una propiedad con lista de opciones (el valor de la clave sin sufijo
+	 * es el guardado en P8): los #Nombre# de la ruta y del patrón del nombre lo prefieren. # no puede ir en un nombre
+	 * simbólico de P8.
+	 */
+	static final String DISPLAY_SUFFIX = "#display";
+
 	/** Propiedad del documento dentro de la ruta de agrupación: #NombreSimbolico#. */
 	private static final Pattern PATH_PROPERTY = Pattern.compile("#([A-Za-z_][A-Za-z0-9_]*)#");
 	private static final String DATE_PATTERN = "dd/MM/yyyy";
@@ -71,7 +86,8 @@ final class DocumentTree {
 		if (config == null) {
 			return path;
 		}
-		if (config.contains("[") && config.contains("name")) {
+		// vnRoot: [ … ] y no cualquier "[": el patrón del nombre (docLabel) puede llevar corchetes.
+		if (VN_ROOT_ARRAY.matcher(config).find()) {
 			Matcher names = VN_ROOT_NAME.matcher(config);
 			while (names.find()) {
 				addFolder(path, names.group(1));
@@ -85,11 +101,17 @@ final class DocumentTree {
 		return path;
 	}
 
-	/** Propiedades (#Nombre#) que usa la ruta, sin repetir y en orden de aparición. */
-	static Set<String> pathProperties(List<String> path) {
+	/** Patrón del nombre de los documentos (docLabel de la config), o null si no tiene o está vacío. */
+	static String parseLabelPattern(String config) {
+		Matcher matcher = DOC_LABEL.matcher(config == null ? "" : config);
+		return matcher.find() && matcher.group(1).trim().length() > 0 ? matcher.group(1).trim() : null;
+	}
+
+	/** Propiedades (#Nombre#) que usan los textos (carpetas de la ruta o patrón del nombre), sin repetir y en orden. */
+	static Set<String> patternProperties(List<String> texts) {
 		Set<String> names = new LinkedHashSet<String>();
-		for (String folder : path) {
-			Matcher matcher = PATH_PROPERTY.matcher(folder);
+		for (String text : texts) {
+			Matcher matcher = PATH_PROPERTY.matcher(text == null ? "" : text);
 			while (matcher.find()) {
 				names.add(matcher.group(1));
 			}
@@ -98,26 +120,46 @@ final class DocumentTree {
 	}
 
 	/**
-	 * Ruta de un documento: cada #Nombre# se reemplaza por el valor de esa propiedad (fechas dd/MM/yyyy, listas
+	 * Ruta de un documento: cada #Nombre# se reemplaza por el valor de esa propiedad (el nombre visible si tiene lista
+	 * de opciones, DISPLAY_SUFFIX; fechas dd/MM/yyyy, listas
 	 * separadas por "; "), o por "(Sin Nombre)" si el documento no la tiene o está vacía. Las comas del valor se cambian
 	 * por ";" porque el cliente separa en carpetas por comas (DQResults.buildTreeData).
 	 */
 	static List<String> resolvePath(List<String> path, Map<String, Object> properties) {
 		List<String> resolved = new ArrayList<String>(path.size());
 		for (String folder : path) {
-			Matcher matcher = PATH_PROPERTY.matcher(folder);
-			StringBuffer name = new StringBuffer();
-			while (matcher.find()) {
-				String value = format(properties.get(matcher.group(1))).replace(',', ';');
-				if (value.isEmpty()) {
-					value = "(Sin " + matcher.group(1) + ")";
-				}
-				matcher.appendReplacement(name, Matcher.quoteReplacement(value));
-			}
-			matcher.appendTail(name);
-			resolved.add(name.toString());
+			resolved.add(replaceProperties(folder, properties, true));
 		}
 		return resolved;
+	}
+
+	/**
+	 * Nombre de un documento según el patrón (docLabel): cada #Nombre# se reemplaza por el valor de esa propiedad,
+	 * formateado como en resolvePath, o por nada si no lo tiene. Sin patrón, o si queda vacío, null (rótulo
+	 * predeterminado).
+	 */
+	static String resolveLabel(String pattern, Map<String, Object> properties) {
+		if (pattern == null) {
+			return null;
+		}
+		String text = replaceProperties(pattern, properties, false).trim();
+		return text.isEmpty() ? null : text;
+	}
+
+	private static String replaceProperties(String text, Map<String, Object> properties, boolean folder) {
+		Matcher matcher = PATH_PROPERTY.matcher(text);
+		StringBuffer replaced = new StringBuffer();
+		while (matcher.find()) {
+			String name = matcher.group(1);
+			String value = format(properties.containsKey(name + DISPLAY_SUFFIX) ? properties.get(name + DISPLAY_SUFFIX)
+					: properties.get(name));
+			if (folder) {
+				value = value.isEmpty() ? "(Sin " + name + ")" : value.replace(',', ';');
+			}
+			matcher.appendReplacement(replaced, Matcher.quoteReplacement(value));
+		}
+		matcher.appendTail(replaced);
+		return replaced.toString();
 	}
 
 	/** Árbol de los resultados, en el orden de las consultas y de los documentos de cada una. */
@@ -171,7 +213,7 @@ final class DocumentTree {
 		data.put("objId", result.id);
 
 		JSONObject node = new JSONObject();
-		node.put("text", label(result.properties));
+		node.put("text", result.text != null ? result.text : label(result.properties));
 		node.put("type", "Document");
 		node.put("index", Long.valueOf(index++));
 		node.put("leaf", Boolean.TRUE);
