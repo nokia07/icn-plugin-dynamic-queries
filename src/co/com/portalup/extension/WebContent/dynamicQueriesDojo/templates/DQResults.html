@@ -60,9 +60,13 @@
 					class="dqResultsCard dqResultsViewerPanel">
 					<div class="dqResultsViewerBar">
 						<button type="button" data-dojo-type="dijit/form/Button"
-							data-dojo-props="disabled:true"
+							data-dojo-props="disabled:true, showLabel:false, iconClass:'dqResultsIconDetach'"
 							data-dojo-attach-point="detachButton"
 							data-dojo-attach-event="onClick: _onDetach">Abrir en pestaña nueva</button>
+						<button type="button" data-dojo-type="dijit/form/Button"
+							data-dojo-props="disabled:true, showLabel:false, iconClass:'dqResultsIconDownload'"
+							data-dojo-attach-point="downloadButton"
+							data-dojo-attach-event="onClick: _onDownload">Descargar</button>
 					</div>
 					<div data-dojo-attach-point="viewerNode" class="dqResultsViewer"></div>
 				</div>

@@ -515,6 +515,17 @@
 	padding-bottom: 6px;
 }
 
+.dqResultsPane .dqResultsIconDetach,
+.dqResultsPane .dqResultsIconDownload {
+	width: 16px;
+	height: 16px;
+	background: url('images/pestana.png') no-repeat center;
+}
+
+.dqResultsPane .dqResultsIconDownload {
+	background-image: url('images/descargar.png');
+}
+
 .dqResultsPane .dqResultsViewer {
 	flex: 1 1 auto;
 	min-height: 0;

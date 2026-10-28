@@ -689,6 +689,8 @@ function(declare,
 				if (waiting && !data.composePending) {
 					this._endComposition(doc.objId);
 				}
+				// Nombre del archivo que descarga el visor (_onDownload).
+				this._documentName = title || name || "documento";
 				if (!data.s3) {
 					// releasedId: se eligió la versión 1 y la serie ya tiene la 2 (el PDF compuesto, con otro Id).
 					this._showIcnViewer(data.releasedId ? lang.mixin({}, doc, { objId: data.releasedId }) : doc);
@@ -845,6 +847,7 @@ function(declare,
 				"&repositoryType=p8&docid=" + encodeURIComponent(doc.objId) + "&embedded=true";
 			domConstruct.create("iframe", { src: url, "class": "dqResultsViewerFrame" }, this.viewerNode);
 			this._setDetachSource(url);
+			this._setDownloadSource(doc);
 		},
 
 		/**
@@ -857,6 +860,8 @@ function(declare,
 			var bytes = base64ToBytes(base64Data);
 
 			if (mimeType === "image/tiff" || mimeType === "image/tif") {
+				// Se descarga el TIFF original (todas sus páginas), no el PNG que se dibuja.
+				this._setDownloadSource(new Blob([ bytes ], { type: mimeType }));
 				var UTIF = window.UTIF;
 				var ifds = UTIF.decode(bytes);
 				UTIF.decodeImage(bytes, ifds[0]); // Solo la primera página.
@@ -875,6 +880,7 @@ function(declare,
 
 			var blob = new Blob([ bytes ], { type: mimeType });
 			this._setDetachSource(blob);
+			this._setDownloadSource(blob);
 			this._viewerUrl = URL.createObjectURL(blob);
 			if (mimeType === "application/pdf") {
 				domConstruct.create("iframe", { src: this._viewerUrl, "class": "dqResultsViewerFrame" }, this.viewerNode);
@@ -886,6 +892,7 @@ function(declare,
 		_clearViewer: function() {
 			this._revokeViewerUrl();
 			this._setDetachSource(null);
+			this._setDownloadSource(null);
 			domConstruct.empty(this.viewerNode);
 		},
 
@@ -893,6 +900,43 @@ function(declare,
 		_setDetachSource: function(source) {
 			this._detachSource = source;
 			this.detachButton.set("disabled", !source);
+		},
+
+		// source: Blob con el contenido (S3) o el documento de FileNet ({ objectStoreName, objId }) del visor; null si no hay.
+		_setDownloadSource: function(source) {
+			this._downloadSource = source;
+			this.downloadButton.set("disabled", !source);
+		},
+
+		_onDownload: function() {
+			var source = this._downloadSource;
+			if (!source) {
+				return;
+			}
+			if (!(source instanceof Blob)) {
+				// FileNet: la acción "Descargar" de ICN (actionDownload, verificada en 3.0.10); los errores los muestra ICN.
+				var repository = Desktop.getRepository(source.objectStoreName);
+				if (!repository) {
+					this._showAlert("El repositorio " + source.objectStoreName + " no está en el escritorio.");
+					return;
+				}
+				repository.retrieveItem(source.objId, function(item) {
+					Desktop.getActionsHandler().actionDownload(repository, [ item ]);
+				});
+				return;
+			}
+			var name = this._documentName || "documento";
+			if (!/\.[A-Za-z0-9]+$/.test(name)) {
+				name += "." + (source.type.split("/")[1] || "bin");
+			}
+			var url = URL.createObjectURL(source);
+			var link = domConstruct.create("a", { href: url, download: name, style: "display:none" }, document.body);
+			link.click();
+			domConstruct.destroy(link);
+			// Revocarla en el mismo momento cancela la descarga en algunos navegadores.
+			setTimeout(function() {
+				URL.revokeObjectURL(url);
+			}, 60000);
 		},
 
 		_onDetach: function() {
