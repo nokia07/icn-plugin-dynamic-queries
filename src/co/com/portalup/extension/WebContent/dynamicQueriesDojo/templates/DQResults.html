@@ -57,7 +57,13 @@
 				<!-- Columna derecha: visor -->
 				<div data-dojo-type="dijit/layout/ContentPane"
 					data-dojo-props="region:'center'"
-					class="dqResultsCard">
+					class="dqResultsCard dqResultsViewerPanel">
+					<div class="dqResultsViewerBar">
+						<button type="button" data-dojo-type="dijit/form/Button"
+							data-dojo-props="disabled:true"
+							data-dojo-attach-point="detachButton"
+							data-dojo-attach-event="onClick: _onDetach">Abrir en pestaña nueva</button>
+					</div>
 					<div data-dojo-attach-point="viewerNode" class="dqResultsViewer"></div>
 				</div>
 			</div>

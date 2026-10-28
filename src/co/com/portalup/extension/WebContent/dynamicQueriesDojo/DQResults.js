@@ -69,6 +69,8 @@ function(declare,
 
 	// Escritorio de ICN con el que bookmark.jsp muestra los documentos que no vienen de S3.
 	var VIEWER_DESKTOP = "LPADocViewer";
+	// Nombre de la pestaña donde "Abrir en pestaña nueva" muestra el documento: se reutiliza en cada click.
+	var DETACHED_WINDOW = "dqResultsViewer";
 	// Cada cuánto se revisa la sesión de ICN (ver _checkSession).
 	var SESSION_CHECK_MS = 500;
 	// Espera máxima por las definiciones de atributos de una clase: si la clase no existe, ICN 3.0.10 no llama ni al
@@ -245,6 +247,7 @@ function(declare,
 			clearInterval(this._sessionTimer);
 			this._stopCompositions();
 			this._revokeViewerUrl();
+			this._revokeDetachedUrl();
 			this._destroyFields();
 			this.inherited(arguments);
 		},
@@ -264,6 +267,7 @@ function(declare,
 
 		_resetSession: function() {
 			this._stopCompositions();
+			this._revokeDetachedUrl();
 			this._sessionLoaded = false;
 			this.isLoaded = false;
 			this._projects = {};
@@ -836,12 +840,11 @@ function(declare,
 
 		_showIcnViewer: function(doc) {
 			this._clearViewer();
-			domConstruct.create("iframe", {
-				src: "/navigator/bookmark.jsp?desktop=" + encodeURIComponent(VIEWER_DESKTOP) +
-					"&feature=BookmarkLayout&repositoryId=" + encodeURIComponent(doc.objectStoreName) +
-					"&repositoryType=p8&docid=" + encodeURIComponent(doc.objId) + "&embedded=true",
-				"class": "dqResultsViewerFrame"
-			}, this.viewerNode);
+			var url = "/navigator/bookmark.jsp?desktop=" + encodeURIComponent(VIEWER_DESKTOP) +
+				"&feature=BookmarkLayout&repositoryId=" + encodeURIComponent(doc.objectStoreName) +
+				"&repositoryType=p8&docid=" + encodeURIComponent(doc.objId) + "&embedded=true";
+			domConstruct.create("iframe", { src: url, "class": "dqResultsViewerFrame" }, this.viewerNode);
+			this._setDetachSource(url);
 		},
 
 		/**
@@ -861,10 +864,18 @@ function(declare,
 				var canvas = domConstruct.create("canvas", { width: ifds[0].width, height: ifds[0].height }, this.viewerNode);
 				canvas.getContext("2d").putImageData(
 					new ImageData(new Uint8ClampedArray(rgba), ifds[0].width, ifds[0].height), 0, 0);
+				// El navegador no muestra TIFF: la pestaña nueva recibe la página como PNG.
+				canvas.toBlob(lang.hitch(this, function(png) {
+					if (png && canvas.parentNode) { // Sin parentNode, ya se eligió otro documento.
+						this._setDetachSource(png);
+					}
+				}), "image/png");
 				return;
 			}
 
-			this._viewerUrl = URL.createObjectURL(new Blob([ bytes ], { type: mimeType }));
+			var blob = new Blob([ bytes ], { type: mimeType });
+			this._setDetachSource(blob);
+			this._viewerUrl = URL.createObjectURL(blob);
 			if (mimeType === "application/pdf") {
 				domConstruct.create("iframe", { src: this._viewerUrl, "class": "dqResultsViewerFrame" }, this.viewerNode);
 			} else {
@@ -874,7 +885,39 @@ function(declare,
 
 		_clearViewer: function() {
 			this._revokeViewerUrl();
+			this._setDetachSource(null);
 			domConstruct.empty(this.viewerNode);
+		},
+
+		// source: URL de bookmark.jsp o Blob con el contenido del documento que muestra el visor; null si no hay.
+		_setDetachSource: function(source) {
+			this._detachSource = source;
+			this.detachButton.set("disabled", !source);
+		},
+
+		_onDetach: function() {
+			var url = this._detachSource;
+			if (!url) {
+				return;
+			}
+			if (typeof url !== "string") {
+				// blob: propio: _clearViewer revoca el del visor en cuanto se elige otro documento.
+				this._revokeDetachedUrl();
+				url = this._detachedUrl = URL.createObjectURL(url);
+			}
+			var win = window.open(url, DETACHED_WINDOW);
+			if (win) {
+				win.focus();
+			} else {
+				this._showAlert("El navegador bloqueó la pestaña nueva. Permita las ventanas emergentes de este sitio.");
+			}
+		},
+
+		_revokeDetachedUrl: function() {
+			if (this._detachedUrl) {
+				URL.revokeObjectURL(this._detachedUrl);
+				this._detachedUrl = null;
+			}
 		},
 
 		_revokeViewerUrl: function() {
