@@ -261,6 +261,17 @@
 	justify-content: flex-end;
 }
 
+/* Ruta de agrupación y nombre del documento: una línea, ampliable hacia abajo (el template de ICN trae resize: none). */
+.dqSaveQueryDialog .dqConfigText {
+	width: 480px;
+	max-width: 70vw;
+}
+
+.dqSaveQueryDialog .dqConfigText textarea {
+	resize: vertical !important;
+	min-height: 1.6em;
+}
+
 .dqSaveQueryDialog .dqProjectSelect {
 	min-width: 240px;
 }

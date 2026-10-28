@@ -4,16 +4,18 @@ define([
 	"dojo/_base/array",
 	"dojo/dom-class",
 	"dojo/dom-construct",
+	"dojo/on",
 	"dojo/when",
 	"dijit/form/Select",
 	"dijit/form/SimpleTextarea",
+	"ecm/widget/ValidationSimpleTextarea",
 	"ecm/widget/ValidationTextBox",
 	"ecm/widget/dialog/BaseDialog",
 	"dynamicQueriesDojo/DqApiClient",
 	"dynamicQueriesDojo/QuerySerializer"
 ],
-function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTextarea, ValidationTextBox, BaseDialog, DqApiClient,
-		QuerySerializer) {
+function(declare, lang, array, domClass, domConstruct, on, when, Select, SimpleTextarea, ValidationSimpleTextarea,
+		ValidationTextBox, BaseDialog, DqApiClient, QuerySerializer) {
 
 	// Límites del servicio de consultas y de asociaciones: config de la consulta (la definición) es un CLOB sin límite;
 	// el de la asociación (ruta de agrupación) sigue siendo de 1024.
@@ -92,7 +94,7 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 
 			// Carpetas en las que se agrupan los resultados, separadas por comas; sin comillas porque van dentro de vnRoot.
 			// Una carpeta #Propiedad# agrupa por el valor de esa propiedad de cada documento.
-			this._pathField = new ValidationTextBox({
+			this._pathField = this._createConfigText({
 				required: true,
 				trim: true,
 				propercase: false,
@@ -115,7 +117,7 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 			}, this._pathField.domNode, "after");
 
 			// Opcional: patrón del nombre de los documentos en el árbol (docLabel); vacío, el nombre predeterminado.
-			this._labelField = new ValidationTextBox({
+			this._labelField = this._createConfigText({
 				trim: true,
 				propercase: false,
 				maxLength: MAX_GROUPING_CONFIG - 40,
@@ -161,6 +163,31 @@ function(declare, lang, array, domClass, domConstruct, when, Select, SimpleTexta
 				this.setMessage("La consulta todavía no se puede guardar: " + errors.join(" "), "error");
 			}
 			this._loadProjects();
+		},
+
+		/**
+		 * Ruta de agrupación y nombre del documento: textarea de una línea que el usuario puede agrandar (como el CE SQL)
+		 * para ver textos largos. Son de una sola línea: Enter no agrega saltos y los pegados se cambian por espacios.
+		 */
+		_createConfigText: function(params) {
+			// placeHolder va como atributo del textarea: el de dijit es un span que en un textarea se superpone al texto.
+			var placeHolder = params.placeHolder;
+			var field = new ValidationSimpleTextarea(lang.mixin({ "class": "dqConfigText" }, params, { placeHolder: "" }));
+			// ValidationSimpleTextarea fija 3 filas al crearse.
+			field.set("rows", 1);
+			if (placeHolder) {
+				field.textbox.setAttribute("placeholder", placeHolder);
+			}
+			this.own(on(field.textbox, "keydown", function(event) {
+				if (event.keyCode === 13) {
+					event.preventDefault();
+				}
+			}), on(field.textbox, "input", function() {
+				if (/[\r\n]/.test(field.textbox.value)) {
+					field.set("value", field.textbox.value.replace(/\s*[\r\n]+\s*/g, " "));
+				}
+			}));
+			return field;
 		},
 
 		_addRow: function(table, label, widget, required) {
