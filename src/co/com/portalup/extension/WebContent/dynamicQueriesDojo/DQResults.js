@@ -899,13 +899,13 @@ function(declare,
 		// source: URL de bookmark.jsp o Blob con el contenido del documento que muestra el visor; null si no hay.
 		_setDetachSource: function(source) {
 			this._detachSource = source;
-			this.detachButton.set("disabled", !source);
+			this.detachButton.style.display = source ? "" : "none";
 		},
 
 		// source: Blob con el contenido (S3) o el documento de FileNet ({ objectStoreName, objId }) del visor; null si no hay.
 		_setDownloadSource: function(source) {
 			this._downloadSource = source;
-			this.downloadButton.set("disabled", !source);
+			this.downloadButton.style.display = source ? "" : "none";
 		},
 
 		_onDownload: function() {

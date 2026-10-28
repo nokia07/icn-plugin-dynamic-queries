@@ -59,14 +59,17 @@
 					data-dojo-props="region:'center'"
 					class="dqResultsCard dqResultsViewerPanel">
 					<div class="dqResultsViewerBar">
-						<button type="button" data-dojo-type="dijit/form/Button"
-							data-dojo-props="disabled:true, showLabel:false, iconClass:'dqResultsIconDetach'"
+						<!-- Botones HTML, no dijit: el tema de ICN les pone borde y ancho mínimo. Ocultos sin documento en el visor. -->
+						<button type="button" style="display: none"
+							title="Abrir en pestaña nueva" aria-label="Abrir en pestaña nueva"
 							data-dojo-attach-point="detachButton"
-							data-dojo-attach-event="onClick: _onDetach">Abrir en pestaña nueva</button>
-						<button type="button" data-dojo-type="dijit/form/Button"
-							data-dojo-props="disabled:true, showLabel:false, iconClass:'dqResultsIconDownload'"
+							data-dojo-attach-event="onclick: _onDetach"
+							class="dqResultsViewerButton"></button>
+						<button type="button" style="display: none"
+							title="Descargar" aria-label="Descargar"
 							data-dojo-attach-point="downloadButton"
-							data-dojo-attach-event="onClick: _onDownload">Descargar</button>
+							data-dojo-attach-event="onclick: _onDownload"
+							class="dqResultsViewerButton dqResultsIconDownload"></button>
 					</div>
 					<div data-dojo-attach-point="viewerNode" class="dqResultsViewer"></div>
 				</div>

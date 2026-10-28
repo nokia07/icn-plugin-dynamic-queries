@@ -512,18 +512,26 @@
 .dqResultsPane .dqResultsViewerBar {
 	flex: 0 0 auto;
 	text-align: right;
-	padding-bottom: 6px;
+	padding-right: 8px;
 }
 
-.dqResultsPane .dqResultsIconDetach,
-.dqResultsPane .dqResultsIconDownload {
-	width: 16px;
-	height: 16px;
-	background: url('images/pestana.png') no-repeat center;
+.dqResultsPane .dqResultsViewerButton {
+	width: 28px;
+	height: 28px;
+	margin: 0 0 6px 4px;
+	padding: 0;
+	border: none;
+	background: url('images/pestana.png') no-repeat center / 24px;
+	cursor: pointer;
 }
 
 .dqResultsPane .dqResultsIconDownload {
 	background-image: url('images/descargar.png');
+}
+
+/* Sin borde, el foco del teclado se marca con el contorno. */
+.dqResultsPane .dqResultsViewerButton:focus-visible {
+	outline: 1px dotted #555;
 }
 
 .dqResultsPane .dqResultsViewer {
