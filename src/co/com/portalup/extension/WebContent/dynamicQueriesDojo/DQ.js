@@ -182,9 +182,9 @@ function(declare,
 		},
 
 		// El repositorio es el configurado en el plug-in (repositoryId); debe estar en el escritorio. La misma
-		// configuración trae la URL del microservicio y si el usuario puede usar el diseñador (canDesign, según sus
-		// grupos de P8), por eso el árbol se carga después. Ocultarlo no protege el microservicio, que el navegador
-		// llama directamente.
+		// configuración trae la URL del microservicio, que dice si el usuario puede usar el diseñador
+		// (getDesignerAccess, tbl_icn_designer_groups); por eso el árbol se carga después. El microservicio aplica la
+		// misma regla a las escrituras.
 		_loadRepository: function() {
 			var session = this._session = (this._session || 0) + 1;
 			SettingsClient.getSettings().then(lang.hitch(this, function(settings) {
@@ -195,27 +195,39 @@ function(declare,
 					this._showRepositoryProblem("El administrador no ha configurado el repositorio de las consultas.");
 					return;
 				}
-				if (!settings.canDesign) {
-					domClass.add(this.domNode, "dqAccessDenied");
-					return;
-				}
 				DqApiClient.baseUrl = settings.projectsApiUrl || "";
-				var repository = Desktop.getRepository(settings.repositoryId);
-				if (!repository) {
-					this._showRepositoryProblem("El repositorio \u201c" + settings.repositoryId +
-						"\u201d no está disponible en este escritorio.");
-					return;
-				}
-				this.repository = repository;
-				this.repositoryNameNode.textContent = repository.name;
-				this.newQueryButton.set("disabled", false);
-				this.projectsButton.set("disabled", false);
-				this.refreshTree();
+				DqApiClient.getDesignerAccess().then(lang.hitch(this, function(access) {
+					if (session !== this._session) {
+						return;
+					}
+					if (!access || !access.canDesign) {
+						domClass.add(this.domNode, "dqAccessDenied");
+						return;
+					}
+					this._showRepository(settings.repositoryId);
+				}), lang.hitch(this, function(error) {
+					if (session === this._session) {
+						this._showRepositoryProblem("No se pudo verificar el acceso al diseñador: " + error.message);
+					}
+				}));
 			}), lang.hitch(this, function(error) {
 				if (session === this._session) {
 					this._showRepositoryProblem("No se pudo leer la configuración del plug-in: " + error.message);
 				}
 			}));
+		},
+
+		_showRepository: function(repositoryId) {
+			var repository = Desktop.getRepository(repositoryId);
+			if (!repository) {
+				this._showRepositoryProblem("El repositorio \u201c" + repositoryId + "\u201d no está disponible en este escritorio.");
+				return;
+			}
+			this.repository = repository;
+			this.repositoryNameNode.textContent = repository.name;
+			this.newQueryButton.set("disabled", false);
+			this.projectsButton.set("disabled", false);
+			this.refreshTree();
 		},
 
 		// Deja el panel como recién creado: sin pestañas, árbol, repositorio ni permiso; loadContent lo vuelve a cargar.

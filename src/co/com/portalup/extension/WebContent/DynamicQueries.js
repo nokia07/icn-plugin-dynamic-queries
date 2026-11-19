@@ -2,13 +2,14 @@ require([
 	"dojo/_base/array",
 	"dijit/registry",
 	"ecm/model/Desktop",
-	"dynamicQueriesDojo/SettingsClient"
+	"dynamicQueriesDojo/SettingsClient",
+	"dynamicQueriesDojo/DqApiClient"
 ],
-function(array, registry, Desktop, SettingsClient) {
+function(array, registry, Desktop, SettingsClient, DqApiClient) {
 
 	/**
 	 * Oculta el botón del feature DQ en la barra de features a quien no puede usar el diseñador
-	 * (SettingsService.canDesign). Solo es interfaz: el panel DQ vuelve a comprobar el permiso al cargar.
+	 * (DqApiClient.getDesignerAccess: tbl_icn_designer_groups del microservicio). Solo es interfaz: el panel DQ vuelve a comprobar el permiso al cargar.
 	 *
 	 * Se revisa la sesión cada CHECK_INTERVAL ms en lugar de usar los eventos de ICN: en 3.0.10 el layout se construye
 	 * antes del login y Desktop.onLogin no avisa del primer inicio de sesión, solo de los siguientes. Además ICN
@@ -16,6 +17,9 @@ function(array, registry, Desktop, SettingsClient) {
 	 */
 	var FEATURE_ID = "DQ"; // DQ.getId()
 	var CHECK_INTERVAL = 500;
+	// Clave de localStorage con la identidad del usuario (DqApiClient.getIdentity), para registrarlo en la tabla de
+	// accesos del microservicio: localStorage.getItem("userInDesigner") en la consola del navegador.
+	var IDENTITY_KEY = "userInDesigner";
 
 	// Usuario de la sesión cuyo permiso se pidió ("" sin sesión) y si puede ver el diseñador (null mientras no se sabe:
 	// el botón queda oculto).
@@ -59,12 +63,26 @@ function(array, registry, Desktop, SettingsClient) {
 			canDesign = null;
 			if (user) {
 				SettingsClient.getSettings().then(function(settings) {
+					DqApiClient.baseUrl = settings.projectsApiUrl || "";
+					DqApiClient.getIdentity().then(function(identity) {
+						if (sessionUser === user) {
+							try {
+								localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+							} catch (e) {
+								// Almacenamiento bloqueado (navegación privada, política): solo es diagnóstico.
+							}
+						}
+					}, function() {
+						// Solo es diagnóstico: el permiso lo decide getDesignerAccess.
+					});
+					return DqApiClient.getDesignerAccess();
+				}).then(function(access) {
 					if (sessionUser === user) {
-						canDesign = !!settings.canDesign;
+						canDesign = !!(access && access.canDesign);
 						applyVisibility();
 					}
 				}, function() {
-					// Sin configuración no se sabe si tiene permiso: el botón sigue oculto.
+					// Sin configuración o sin microservicio no se sabe si tiene permiso: el botón sigue oculto.
 					if (sessionUser === user) {
 						canDesign = false;
 					}

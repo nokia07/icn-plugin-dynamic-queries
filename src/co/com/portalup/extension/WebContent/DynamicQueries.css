@@ -85,7 +85,7 @@
 	margin-bottom: 8px;
 }
 
-/* Sin permiso (SettingsService.canDesign = false): solo el aviso, sin diseñador ni consultas */
+/* Sin permiso (DqApiClient.getDesignerAccess: canDesign = false): solo el aviso, sin diseñador ni consultas */
 .dqPane .dqNoAccess,
 .dqPane.dqAccessDenied .dqMainContainer {
 	display: none;

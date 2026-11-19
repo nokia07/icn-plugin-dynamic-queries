@@ -13,6 +13,23 @@ function(Deferred, xhr) {
 		/** URL base configurada en el plug-in (projectsApiUrl); la fija DQ tras getSettings. "" = no configurado. */
 		baseUrl: null,
 
+		/**
+		 * { canDesign }: si el usuario puede usar el diseñador, según tbl_icn_designer_groups del microservicio (la
+		 * misma regla con la que rechaza las escrituras).
+		 */
+		getDesignerAccess: function() {
+			return send("GET", "/designer-access");
+		},
+
+		/**
+		 * Identidad del usuario tal como la ve el microservicio (WebSphere): { containerPrincipal, ceUser: { name,
+		 * shortName, dn, dnNormalized, id }, groups: [ { … } ] }. Son los valores que se pueden registrar en
+		 * tbl_icn_designer_groups.
+		 */
+		getIdentity: function() {
+			return send("GET", "/me/identity");
+		},
+
 		/** Proyectos { id, name, description, status, createdAt }; status opcional: "ACTIVE" | "INACTIVE". */
 		listProjects: function(status) {
 			return send("GET", "/project" + (status ? "?status=" + encodeURIComponent(status) : ""));

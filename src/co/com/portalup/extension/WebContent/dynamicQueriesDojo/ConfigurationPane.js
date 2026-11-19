@@ -39,7 +39,6 @@ define([
 			this._loadRepositories(values.repositoryId || "");
 			this.projectsApiUrlField.set("value",
 				"projectsApiUrl" in values ? values.projectsApiUrl || "" : this.defaultProjectsApiUrl, false);
-			this.designerGroupsField.set("value", values.designerGroups || "", false);
 			this.s3DownloadUrlField.set("value", values.s3DownloadUrl || "", false);
 			this.s3ApiKeyField.set("value", values.s3ApiKey || "", false);
 			this.composeUrlField.set("value", values.composeUrl || "", false);
@@ -77,7 +76,6 @@ define([
 				configuration: [
 					{ name: "repositoryId", value: this.repositoryIdField.get("value") },
 					{ name: "projectsApiUrl", value: this.projectsApiUrlField.get("value") },
-					{ name: "designerGroups", value: this.designerGroupsField.get("value") },
 					{ name: "s3DownloadUrl", value: this.s3DownloadUrlField.get("value") },
 					{ name: "s3ApiKey", value: this.s3ApiKeyField.get("value") },
 					{ name: "composeUrl", value: this.composeUrlField.get("value") },
